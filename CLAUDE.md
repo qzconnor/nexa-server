@@ -10,6 +10,9 @@ Chiffretext, den die Geräte erzeugen. Konzept: `../nexa-app/docs/NEXA-SERVER.md
   `deploy/nginx.conf` für nginx auf dem Host). Kein npm-Paket, kein `bin`, kein Betrieb mit lokalem Node;
   Node lokal nur zum Entwickeln. Neue Einstellungen gehören auch in `docker-compose.yml`, `.env.example`
   und die Tabelle im README.
+- **Image**: `.github/workflows/docker.yml` testet und schiebt bei Pushes auf `main` (`latest`, `sha-…`)
+  und Tags `v*` (`1.2.3`, `1.2`) nach `ghcr.io/qzconnor/nexa-server`, für amd64 und arm64. Eine Version:
+  `version` in `package.json` anheben, Tag `v<version>` pushen.
 - **Sprache**: Doku, CLI-Ausgaben und Log-Zeilen Deutsch (mit echten Umlauten und „Anführungszeichen“).
   Code-Kommentare Englisch; sie erklären das Warum, nicht das Was. Fehlertexte im Protokoll (`message`)
   sind Englisch und für Entwickler, Clients übersetzen anhand von `code`.

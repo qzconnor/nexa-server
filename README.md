@@ -17,8 +17,12 @@ Stand: Phase 1, also Namespaces, Einladungen, Instanzen und das Relay über WebS
 
 ## Betrieb
 
-nexa-server läuft nur als Docker-Container. Davor gehört ein Reverse Proxy mit HTTPS, der WebSockets
-durchreicht; ohne HTTPS gingen die Einladungscodes im Klartext übers Netz. Zwei Wege sind vorbereitet.
+nexa-server läuft nur als Docker-Container. Das Image baut GitHub Actions bei jedem Push auf `main` und legt
+es in der GitHub Container Registry ab: `ghcr.io/qzconnor/nexa-server` (amd64 und arm64). Compose lädt es
+selbst; aus dem Repo braucht der Server nur `docker-compose.yml`, `.env` und für Caddy das `Caddyfile`.
+
+Davor gehört ein Reverse Proxy mit HTTPS, der WebSockets durchreicht; ohne HTTPS gingen die
+Einladungscodes im Klartext übers Netz. Zwei Wege sind vorbereitet.
 
 ### Mit Caddy
 
@@ -26,15 +30,16 @@ Der Standard: Caddy läuft als zweiter Container und holt das Zertifikat bei Let
 Voraussetzung sind eine Domain, die auf die Maschine zeigt, und freie, erreichbare Ports 80 und 443.
 
 ```sh
+git clone https://github.com/qzconnor/nexa-server.git && cd nexa-server
 cp .env.example .env              # NEXA_DOMAIN eintragen
-docker compose up -d --build
+docker compose up -d
 ```
 
 ### Mit nginx auf dem Host
 
-1. `cp .env.example .env` und dort `COMPOSE_PROFILES` und `NEXA_DOMAIN` auskommentieren. Dann startet nur
-   der Server, erreichbar unter `127.0.0.1:8080` und nicht von außen.
-2. `docker compose up -d --build`
+1. Repo klonen, `cp .env.example .env` und dort `COMPOSE_PROFILES` und `NEXA_DOMAIN` auskommentieren. Dann
+   startet nur der Server, erreichbar unter `127.0.0.1:8080` und nicht von außen.
+2. `docker compose up -d`
 3. [`deploy/nginx.conf`](deploy/nginx.conf) nach `/etc/nginx/conf.d/nexa-server.conf` kopieren, die Domain
    eintragen, das Zertifikat holen (z. B. `certbot certonly --nginx -d nexa.example.com`) und
    `nginx -t && systemctl reload nginx`.
@@ -64,7 +69,16 @@ docker compose cp server:/data ./backup
 docker compose start server
 ```
 
-Aktualisieren: `git pull && docker compose up -d --build`.
+Aktualisieren: `git pull && docker compose pull && docker compose up -d`. `git pull` holt nur Änderungen an
+`docker-compose.yml` und `Caddyfile`, `docker compose pull` das neue Image.
+
+Welches Image läuft, bestimmt `NEXA_VERSION`:
+
+| Tag | Inhalt |
+|---|---|
+| `latest` | Stand von `main` (Standard) |
+| `0.1.0`, `0.1` | eine Version; entsteht, wenn ein Tag `v0.1.0` gepusht wird |
+| `sha-1dc5d48` | ein bestimmter Commit, zum Festhalten oder Zurückgehen |
 
 ## Einstellungen
 
@@ -74,6 +88,7 @@ In `.env` neben `docker-compose.yml`; Compose reicht sie an die Container weiter
 |---|---|---|
 | `COMPOSE_PROFILES` | `caddy` | `caddy` startet Caddy mit; leer lassen für nginx oder einen anderen Proxy |
 | `NEXA_DOMAIN` | | Domain für Caddy |
+| `NEXA_VERSION` | `latest` | Tag des Images, siehe oben |
 | `NEXA_LOCAL_PORT` | `8080` | Port auf `127.0.0.1`, auf den ein Proxy auf dem Host zeigt |
 | `TZ` | `Europe/Berlin` | Zeitzone, z. B. für die Zeiten in der CLI |
 | `NEXA_MAX_MESSAGE_KB` | `1024` | Größte Nachricht über WebSocket; eine größere trennt die Verbindung (1009) |
@@ -151,8 +166,11 @@ npm run dev                       # Server auf 127.0.0.1:8080 mit Neustart bei �
 npm run cli -- namespace create test
 npm run typecheck
 npm test
-docker build -t nexa-server .     # das Image, wie es im Betrieb läuft
+docker compose up -d --build      # das Image lokal bauen statt aus der Registry laden
 ```
+
+`.github/workflows/docker.yml` führt bei jedem Push und Pull Request Typecheck und Tests aus. Bei Pushes
+auf `main` und bei Tags `v*` baut er danach das Image und legt es in der Registry ab.
 
 Aufbau und Regeln stehen in [`CLAUDE.md`](CLAUDE.md).
 

@@ -4,8 +4,10 @@
 #   - nginx or another proxy on the host talks to 127.0.0.1:${NEXA_LOCAL_PORT}, see deploy/nginx.conf.
 services:
   server:
+    # The image GitHub Actions publishes; `docker compose pull` fetches a new one. `build` stays for
+    # `docker compose up --build` from a checkout, and as the fallback if the image cannot be pulled.
+    image: ghcr.io/qzconnor/nexa-server:${NEXA_VERSION:-latest}
     build: .
-    image: nexa-server:latest
     restart: unless-stopped
     # tini as PID 1 forwards signals, so `docker compose stop` shuts the relay down cleanly.
     init: true

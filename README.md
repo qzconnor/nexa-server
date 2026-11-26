@@ -4,8 +4,9 @@ Selbst gehosteter Server für Nexa: Er verbindet die eigenen Geräte (Instanzen)
 das andere fernsteuern kann, später auch vom Handy aus. Er leitet nur weiter und sieht keine Inhalte;
 die Geräte verschlüsseln selbst.
 
-Stand: Phase 1, also Namespaces, Einladungen, Instanzen und das Relay über WebSocket. Das Konzept steht in
-`nexa-app/docs/NEXA-SERVER.md`, das Protokoll in [`docs/PROTOCOL.md`](docs/PROTOCOL.md).
+Stand: Phase 1, also Namespaces, Einladungen, Instanzen und das Relay über WebSocket. Dazu kommt die
+[Web-App fürs Handy](#web-app) (Phase 3, im Aufbau). Das Konzept steht in `nexa-app/docs/NEXA-SERVER.md`,
+das Protokoll in [`docs/PROTOCOL.md`](docs/PROTOCOL.md).
 
 ## Begriffe
 
@@ -95,9 +96,35 @@ In `.env` neben `docker-compose.yml`; Compose reicht sie an die Container weiter
 | `NEXA_MAX_INSTANCES` | `20` | Instanzen je Namespace |
 | `NEXA_RATE_LIMIT` | `100` | Nachrichten je Sekunde und Verbindung, kurzzeitig doppelt so viele |
 | `NEXA_LOG_LEVEL` | `info` | `debug`, `info`, `warn` oder `error` |
+| `NEXA_PWA` | `false` | `true` liefert die Web-App unter `/app/` aus, siehe [Web-App](#web-app) |
 
 Adresse, Port und Datenordner im Container (`NEXA_HOST=0.0.0.0`, `NEXA_PORT=8080`, `NEXA_DATA_DIR=/data`)
 legt das Image fest.
+
+## Web-App
+
+Mit `NEXA_PWA=true` liefert der Server unter `https://<domain>/app/` eine Web-App fürs Handy aus. Sie
+zeigt in einer Inbox, was auf einen wartet (Rückfragen, Freigaben, Pläne, Fehler, fertige Antworten), und
+die Chats der eigenen Computer, mit Eingabe für neue Prompts. Man kann sie zum Home-Bildschirm hinzufügen.
+Sie koppelt sich wie jedes Gerät mit einem Kopplungscode, als Instanz mit der Rolle *Steuerung*. Aussehen
+und Themes sind die der Desktop-App.
+
+Stand: Gerüst mit Themes, Inbox und Chats als leere Seiten. Koppeln, Chats lesen und Prompts senden und die
+Inbox folgen.
+
+**Warum sie aus ist**: Für die Web-App ist der Server nicht blind. Sie hält wie jedes Gerät den Schlüssel
+des Namespace, ihren Code lädt der Browser aber bei jedem Start vom Server. Wer den Server übernimmt (oder
+sein Admin), kann ihr also Code unterschieben, der den Schlüssel ausliest, alle Chats mitliest und die
+Computer steuert. Bei der Desktop-App geht das nicht, ihr Code kommt nicht vom Server. Wer die Web-App
+einschaltet, vertraut dem Server deshalb wie den eigenen Geräten. Auf dem eigenen Server ist das meist in
+Ordnung, auf einem geteilten nur, wenn man dem Admin traut.
+
+Was der Server tun kann, tut er: Die Seiten der App dürfen nur Skripte und Styles von ihm laden und nur
+mit ihm sprechen (Content Security Policy), laufen in keinem Frame und geben keinen Referrer weiter. Das
+schützt vor fremden Seiten und eingeschleusten Skripten, nicht vor dem Server selbst.
+
+Das Image enthält die Web-App immer; `NEXA_PWA` schaltet nur die Auslieferung. `GET /v1/info` meldet sie
+als `"pwa": true`.
 
 ## Admin-CLI
 
@@ -153,21 +180,30 @@ den Proxy, IP-Adressen. Das ist der Preis eines Relays.
 verweigern und eine eigene Instanz in die Liste eines Namespace schmuggeln. Lesen kann er nichts, solange
 die Geräte der Liste nicht blind glauben: Den Schlüssel des Namespace bekommt nur, wer sich mit dem
 alten Schlüssel ausgewiesen hat. Wie die Geräte das tun, steht in [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
-unter „Hinweise für Clients“.
+unter „Hinweise für Clients“. Die Ausnahme ist die [Web-App](#web-app): Ihr kann ein übernommener Server
+eigenen Code geben, deshalb ist sie aus, bis man sie einschaltet.
 
 ## Entwicklung
 
-Lokal mit Node.js ab 24, nur zum Entwickeln. Es gibt keinen Build-Schritt: Node führt die
-TypeScript-Quellen direkt aus, auch im Image.
+Lokal mit Node.js ab 24, nur zum Entwickeln. Der Server hat keinen Build-Schritt: Node führt die
+TypeScript-Quellen direkt aus, auch im Image. Nur die Web-App (`pwa/`, Vue und Vite) wird gebaut, im Image
+von einer eigenen Stufe des `Dockerfile`.
 
 ```sh
 npm install
 npm run dev                       # Server auf 127.0.0.1:8080 mit Neustart bei Änderungen, Daten in ./data
+npm run dev:pwa                   # Web-App mit Vite unter http://localhost:5173/app/, API vom Server oben
+npm run build:pwa                 # Web-App nach dist/app, für NEXA_PWA=true npm run dev
+npm run sync:app                  # geteilten Code aus ../nexa-app nach pwa/src/shared kopieren
 npm run cli -- namespace create test
-npm run typecheck
+npm run typecheck                 # Server und Web-App
 npm test
 docker compose up -d --build      # das Image lokal bauen statt aus der Registry laden
 ```
+
+Die Web-App übernimmt Code der Desktop-App (Themes, Chat-Modell, Remote Control, Umschlag, Mitglieder,
+Kopplungscode) als Kopie in `pwa/src/shared`, Byte für Byte. Dort nichts von Hand ändern, sondern in der App
+und danach `npm run sync:app`; `node scripts/sync-from-app.ts --check` zeigt Abweichungen.
 
 `.github/workflows/docker.yml` führt bei jedem Push und Pull Request Typecheck und Tests aus. Bei Pushes
 auf `main` und bei Tags `v*` baut er danach das Image und legt es in der Registry ab.

@@ -1,8 +1,10 @@
 .git
 node_modules
+dist
 data
 docs
 deploy
 .env
 *.log
-src/**/*.test.ts
+scripts
+**/*.test.ts

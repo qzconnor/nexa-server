@@ -1,4 +1,14 @@
 # syntax=docker/dockerfile:1
+
+# The web app (NEXA_PWA) is static files, the same on every platform, so it is built once, natively on
+# the build machine, instead of under emulation for each platform of the image.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS pwa
+WORKDIR /build
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY pwa ./pwa
+RUN npm run build:pwa
+
 FROM node:24-alpine
 
 ENV NODE_ENV=production \
@@ -11,6 +21,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 # Node runs the TypeScript sources directly (type stripping), so there is no build step.
 COPY src ./src
+COPY --from=pwa /build/dist/app ./dist/app
 
 # A wrapper on PATH, so `docker compose exec server nexa-server …` reaches the admin CLI. Written here
 # rather than copied, so a Windows checkout cannot smuggle CRLF line endings into it.

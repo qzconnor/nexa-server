@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { WebSocketServer } from 'ws'
 import pkg from '../package.json' with { type: 'json' }
 import { isPublicKey } from './auth.ts'
-import type { Config } from './config.ts'
+import { ConfigError, type Config } from './config.ts'
 import type { Logger } from './log.ts'
 import {
   PROTOCOL_VERSION,
@@ -14,15 +14,18 @@ import {
   type JoinResponse,
   type ServerInfo,
 } from './protocol.ts'
+import { PWA_DIR, PWA_PATH, loadPwa, servePwa } from './pwa.ts'
 import { Relay } from './relay.ts'
 import { StoreError, type Store } from './store.ts'
 
 export const VERSION: string = pkg.version
 
 export interface ServerOptions {
-  config: Pick<Config, 'host' | 'port' | 'maxMessageBytes' | 'rateLimit'>
+  config: Pick<Config, 'host' | 'port' | 'maxMessageBytes' | 'rateLimit' | 'pwa'>
   store: Store
   log: Logger
+  /** The built web app, served when `config.pwa` is on; `dist/app` next to src unless given. */
+  pwaDir?: string
   authTimeoutMs?: number
   heartbeatMs?: number
 }
@@ -51,6 +54,11 @@ class HttpFailure extends Error {
 
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
   const { config, store, log } = options
+  const pwaDir = options.pwaDir ?? PWA_DIR
+  const pwa = config.pwa ? loadPwa(pwaDir) : null
+  if (config.pwa && !pwa) {
+    throw new ConfigError(`NEXA_PWA ist an, aber die Web-App fehlt in ${pwaDir}. Bauen mit: npm run build:pwa`)
+  }
   const relay = new Relay({
     store,
     log,
@@ -68,12 +76,27 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     clientTracking: false,
   })
 
-  const info: ServerInfo = { name: 'nexa-server', version: VERSION, protocol: PROTOCOL_VERSION }
+  const info: ServerInfo = { name: 'nexa-server', version: VERSION, protocol: PROTOCOL_VERSION, pwa: pwa !== null }
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const path = pathOf(req)
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Cache-Control', 'no-store')
+    if (pwa && (path === '/app' || path.startsWith(PWA_PATH))) {
+      // Same origin only: no CORS header, unlike the API below.
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        throw new HttpFailure(405, 'method-not-allowed', 'method not allowed', { Allow: 'GET, HEAD' })
+      }
+      if (path === '/app') {
+        // Relative URLs in the app resolve against /app/, so the bare path would break them.
+        const query = req.url?.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''
+        res.writeHead(301, { Location: PWA_PATH + query, 'Content-Length': 0 })
+        res.end()
+        return
+      }
+      if (!servePwa(req, res, pwa, path)) throw new HttpFailure(404, 'not-found', 'not found')
+      return
+    }
     // Nothing here rides on cookies or other ambient credentials, so any origin may call it.
     res.setHeader('Access-Control-Allow-Origin', '*')
 

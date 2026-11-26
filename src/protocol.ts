@@ -71,6 +71,8 @@ export interface ServerInfo {
   name: 'nexa-server'
   version: string
   protocol: typeof PROTOCOL_VERSION
+  /** Whether this server serves the web app at `/app` (`NEXA_PWA`); a QR link to it only works then. */
+  pwa: boolean
 }
 
 /** Body of `POST /v1/join`. */

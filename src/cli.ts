@@ -122,6 +122,7 @@ async function serve(config: Config, io: CliIo): Promise<number> {
     throw error
   }
   log.info(`nexa-server ${VERSION} läuft auf ${server.url}, Daten in ${config.dataDir}`)
+  if (config.pwa) log.info(`Web-App unter ${server.url}/app/`)
   await (io.untilStop ?? untilSignal)()
   log.info('Fahre herunter …')
   await server.close()

@@ -18,10 +18,20 @@ Allgemein:
 ### `GET /` und `GET /v1/info`
 
 ```json
-{ "name": "nexa-server", "version": "0.1.0", "protocol": 1 }
+{ "name": "nexa-server", "version": "0.1.0", "protocol": 1, "pwa": false }
 ```
 
 Damit prüft ein Client, ob unter der Adresse ein nexa-server läuft und ob er dessen Protokoll spricht.
+`pwa` sagt, ob der Server die Web-App unter `/app/` ausliefert (`NEXA_PWA`). Nur dann führt ein Link
+`https://<server>/app#nexa1:…` (etwa als QR-Code zum Koppeln) irgendwohin. Ältere Server ohne das Feld
+liefern keine Web-App.
+
+### `GET /app/`
+
+Die Web-App, nur mit `NEXA_PWA=true`, sonst `404`. `/app` leitet auf `/app/` um. Pfade ohne Dateiendung
+sind Seiten der App und bekommen `index.html`; fehlende Dateien `404`. Anders als die API ohne CORS und mit
+einer strengen Content Security Policy: Skripte, Styles und Verbindungen nur vom selben Server, kein
+Frame.
 
 ### `GET /health`
 

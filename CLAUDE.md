@@ -22,6 +22,11 @@ Chiffretext, den die Geräte erzeugen. Konzept: `../nexa-app/docs/NEXA-SERVER.md
   `docs/PROTOCOL.md`. Was nicht abwärtskompatibel ist, braucht eine neue Version (`/v2/…`).
 - **`src/protocol.ts` und `src/auth.ts` bleiben ohne Node-APIs** (nur WebCrypto, `TextEncoder`,
   `btoa`/`atob`), weil die App und die PWA sie übernehmen.
+- **`pwa/src/shared/` nie von Hand ändern**: Kopien aus `nexa-app/src/shared`, abgeglichen mit
+  `npm run sync:app`. Änderungen gehören in die App (bzw. nach `src/protocol.ts`, `src/auth.ts`).
+- **Web-App (`NEXA_PWA`) bleibt standardmäßig aus**: Für sie ist der Server nicht blind (er liefert ihren
+  Code, sie hält den Schlüssel). Die CSP in `src/pwa.ts` nicht lockern, kein Inline-Skript, kein
+  `'unsafe-inline'`, kein Code von fremden Hosts.
 - Dateien mit dem Edit/Write-Werkzeug ändern, nicht mit PowerShell `Set-Content` (Kodierung).
 - Commits nur auf Anfrage.
 
@@ -29,8 +34,11 @@ Chiffretext, den die Geräte erzeugen. Konzept: `../nexa-app/docs/NEXA-SERVER.md
 
 ```sh
 npm run dev          # Server mit --watch, Daten in ./data
+npm run dev:pwa      # Web-App mit Vite (Proxy für /v1 auf den Server)
+npm run build:pwa    # Web-App nach dist/app (NEXA_PWA=true liefert sie aus)
+npm run sync:app     # geteilten Code aus ../nexa-app nach pwa/src/shared kopieren (--check: nur prüfen)
 npm run cli -- …     # Admin-CLI, z. B. npm run cli -- namespace create test
-npm run typecheck    # tsc --noEmit
+npm run typecheck    # tsc --noEmit für den Server, vue-tsc für pwa/
 npm test             # Vitest, Tests liegen als *.test.ts neben dem Modul
 docker build -t nexa-server .   # Image wie im Betrieb
 ```
@@ -39,11 +47,14 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
 
 ## Technik
 
-- Node ≥ 24 führt die `.ts`-Dateien direkt aus (Type-Stripping), kein Build. Deshalb: Imports mit Endung
+- Node ≥ 24 führt die `.ts`-Dateien in `src/` direkt aus (Type-Stripping), kein Build. Deshalb: Imports mit Endung
   `.ts`, `import type` für Typen, keine `enum`s, keine Parameter-Properties, keine `namespace`s
   (`erasableSyntaxOnly`). Konstanten-Sammlungen als `{ … } as const`.
 - Speicher ist `node:sqlite` (`DatabaseSync`), WebSocket ist `ws`. Weitere Abhängigkeiten nur mit gutem
   Grund.
+- Die Web-App in `pwa/` ist wie der Renderer der App gebaut: Vue 3, Vite, Tailwind 4, vue-router,
+  `@lucide/vue`, dieselben Theme-Tokens (`pwa/src/theme.ts` entspricht `themes/apply.ts` der App). Ihr
+  `tsconfig` folgt dem der App, Imports ohne Endung sind dort in Ordnung.
 - Stil: keine Semikolons, einfache Anführungszeichen, zwei Leerzeichen, wie in `nexa-app`.
 
 ## Aufbau
@@ -51,7 +62,8 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
 - `src/main.ts`: Einstieg, ruft `runCli`.
 - `src/cli.ts`: Admin-CLI und `serve`.
 - `src/config.ts`: Umgebungsvariablen (`NEXA_*`), Liste in `README.md`.
-- `src/server.ts`: HTTP-Routen (`/`, `/v1/info`, `/health`, `/v1/join`) und das Upgrade auf `/v1/ws`.
+- `src/server.ts`: HTTP-Routen (`/`, `/v1/info`, `/health`, `/v1/join`, `/app/`) und das Upgrade auf `/v1/ws`.
+- `src/pwa.ts`: liefert den Build der Web-App aus dem Speicher aus, mit CSP, Caching und SPA-Fallback.
 - `src/relay.ts`: Verbindungen je Namespace, Anmeldung, Weiterleitung, Ereignisse, Heartbeat.
 - `src/store.ts`: SQLite-Schema und Zugriffe. Schemaänderungen über `PRAGMA user_version` (`SCHEMA_V2` …
   in `#migrate` ergänzen, nie bestehende Schritte ändern).
@@ -59,6 +71,8 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
   Namespace-Namen.
 - `src/protocol.ts`: Typen und Prüfung der Nachrichten, Close- und Fehler-Codes.
 - `src/auth.ts`: Import öffentlicher Schlüssel, Signatur der Anmeldung, base64url.
+- `pwa/`: die Web-App (`index.html`, `vite.config.ts`, `src/` mit Ansichten, Router, Theme, `shared/`).
+- `scripts/sync-from-app.ts`: kopiert den geteilten Code aus der App nach `pwa/src/shared`.
 
 ## Konventionen
 

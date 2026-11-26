@@ -17,5 +17,5 @@
     "resolveJsonModule": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "vitest.config.ts"]
+  "include": ["src", "scripts", "vitest.config.ts", "pwa/vite.config.ts"]
 }

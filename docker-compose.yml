@@ -20,6 +20,7 @@ services:
       NEXA_MAX_MESSAGE_KB: ${NEXA_MAX_MESSAGE_KB:-1024}
       NEXA_RATE_LIMIT: ${NEXA_RATE_LIMIT:-100}
       NEXA_LOG_LEVEL: ${NEXA_LOG_LEVEL:-info}
+      NEXA_PWA: ${NEXA_PWA:-false}
     volumes:
       - data:/data
 

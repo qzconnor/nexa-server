@@ -1,0 +1,31 @@
+{
+  "name": "nexa-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Selbst gehosteter Server für Nexa: Remote Control und Abgleich zwischen den eigenen Geräten",
+  "author": "Connor Breuer",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "nexa-server": "src/main.ts"
+  },
+  "scripts": {
+    "start": "node src/main.ts serve",
+    "dev": "node --watch src/main.ts serve",
+    "cli": "node src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  }
+}

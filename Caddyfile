@@ -1,0 +1,4 @@
+{$NEXA_DOMAIN} {
+	# WebSocket upgrades pass through reverse_proxy as they are.
+	reverse_proxy server:8080
+}

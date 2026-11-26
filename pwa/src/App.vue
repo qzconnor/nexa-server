@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ChevronLeft, Inbox, MessagesSquare, Settings } from '@lucide/vue'
+import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { pageTitle } from './page-title'
 
 const route = useRoute()
 const router = useRouter()
@@ -10,10 +12,12 @@ const tabs = [
   { id: 'chats', to: '/chats', label: 'Chats', icon: MessagesSquare },
 ] as const
 
+const title = computed(() => pageTitle.value?.text ?? route.meta.title)
+
 function back(): void {
-  // Opened directly (a link, the home screen) there is nothing to go back to inside the app.
+  // Opened directly (a link, the home screen): the page above it, not out of the app.
   if (window.history.state?.back) router.back()
-  else void router.replace('/')
+  else void router.replace(route.path.split('/').slice(0, -1).join('/') || '/')
 }
 </script>
 
@@ -23,17 +27,17 @@ function back(): void {
     <header class="glass pt-safe px-safe absolute inset-x-0 top-0 z-10 border-b border-border">
       <div class="mx-auto flex h-(--header-height) max-w-xl items-center gap-1 px-2">
         <button
-          v-if="!route.meta.tab"
+          v-if="route.meta.back"
           type="button"
-          class="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+          class="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="Zurück"
           @click="back"
         >
           <ChevronLeft class="size-5" />
         </button>
-        <h1 class="min-w-0 flex-1 truncate px-2 text-base font-semibold">{{ route.meta.title }}</h1>
+        <h1 class="min-w-0 flex-1 truncate px-2 text-base font-semibold">{{ title }}</h1>
         <RouterLink
-          v-if="route.meta.tab"
+          v-if="!route.meta.back"
           to="/settings"
           class="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="Einstellungen"
@@ -43,11 +47,19 @@ function back(): void {
       </div>
     </header>
 
-    <main class="pt-header pb-tabbar px-safe h-full overflow-y-auto overscroll-contain">
+    <!-- A chat scrolls itself, between the header and its composer. -->
+    <main v-if="route.meta.fullscreen" class="h-full">
+      <RouterView />
+    </main>
+    <main v-else class="pt-header pb-tabbar px-safe h-full overflow-y-auto overscroll-contain">
       <RouterView />
     </main>
 
-    <nav class="glass pb-safe px-safe absolute inset-x-0 bottom-0 z-10 border-t border-border" aria-label="Bereiche">
+    <nav
+      v-if="!route.meta.fullscreen"
+      class="glass pb-safe px-safe absolute inset-x-0 bottom-0 z-10 border-t border-border"
+      aria-label="Bereiche"
+    >
       <div class="mx-auto grid h-(--tabbar-height) max-w-xl grid-cols-2">
         <RouterLink
           v-for="tab in tabs"

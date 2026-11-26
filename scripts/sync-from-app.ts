@@ -37,6 +37,8 @@ const SHARED_ENTRIES = [
  */
 const EXTRA: Record<string, string> = {
   'src/renderer/src/lib/code-colors.ts': 'lib/code-colors.ts',
+  // How the chat window groups a timeline and names its tools: the phone shows a chat the same way.
+  'src/renderer/src/lib/tools.ts': 'lib/tools.ts',
   'src/main/server-link/connection.ts': 'client/server-link/connection.ts',
   'src/main/server-link/device-channel.ts': 'client/server-link/device-channel.ts',
   'src/main/server-link/membership.ts': 'client/server-link/membership.ts',

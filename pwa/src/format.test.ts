@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { guessDeviceName } from './device-name'
-import { ago, issueText } from './format'
+import { ago, duration, issueText, shortTime } from './format'
 
 describe('format', () => {
+  it('says when a chat was active, short', () => {
+    const now = new Date(2026, 10, 26, 15, 0).getTime()
+    expect(shortTime(new Date(2026, 10, 26, 9, 5).getTime(), now)).toBe('09:05')
+    expect(shortTime(new Date(2026, 10, 25, 23, 59).getTime(), now)).toBe('Gestern')
+    expect(shortTime(new Date(2026, 10, 23, 12).getTime(), now)).toBe('Mo')
+    expect(shortTime(new Date(2026, 9, 3, 12).getTime(), now)).toBe('3.10.26')
+  })
+
+  it('says how long a turn took', () => {
+    expect(duration(8_400)).toBe('8 s')
+    expect(duration(184_000)).toBe('3 min 4 s')
+    expect(duration(120_000)).toBe('2 min')
+    expect(duration(72 * 60_000)).toBe('1 h 12 min')
+  })
+
   it('says how long ago', () => {
     const now = Date.UTC(2026, 10, 26, 12)
     expect(ago(now - 30_000, now)).toBe('vor 30 Sekunden')

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Link2 } from '@lucide/vue'
+import { RouterLink } from 'vue-router'
 </script>
 
 <template>
@@ -11,10 +12,16 @@ import { Link2 } from '@lucide/vue'
       <div class="min-w-0 space-y-1">
         <h2 id="not-paired" class="font-semibold">Noch nicht gekoppelt</h2>
         <p class="text-sm text-muted-foreground">
-          Gekoppelt wird mit einem Kopplungscode aus Nexa auf dem Computer: Einstellungen › Geräte › „Gerät
-          hinzufügen“. Das Koppeln kommt in der nächsten Version dieser Web-App.
+          Mit einem Kopplungscode aus Nexa auf dem Computer (Einstellungen › Geräte › „Gerät hinzufügen“) steuerst du
+          deine Computer von hier.
         </p>
       </div>
     </div>
+    <RouterLink
+      to="/pair"
+      class="mt-4 flex h-10 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground"
+    >
+      Koppeln
+    </RouterLink>
   </section>
 </template>

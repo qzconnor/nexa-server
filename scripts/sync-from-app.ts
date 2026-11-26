@@ -1,8 +1,8 @@
 /**
  * Copies the code the PWA shares with the desktop app from a checkout of nexa-app into pwa/src, byte for
  * byte, so both stay the same: the themes, the chat model, Remote Control, envelope, members and pairing
- * code, and whatever those import. protocol.ts and auth.ts come from this repo's src instead, since they
- * are the originals the app copies.
+ * code, the client of the server link and of Remote Control, and whatever those import. protocol.ts and
+ * auth.ts come from this repo's src instead, since they are the originals the app copies.
  *
  *   node scripts/sync-from-app.ts           copy (nexa-app next to this repo, or NEXA_APP_DIR)
  *   node scripts/sync-from-app.ts --check   only compare; exit code 1 if anything differs
@@ -30,8 +30,18 @@ const SHARED_ENTRIES = [
   'themes/file.ts',
   'themes/types.ts',
 ]
-/** Files of the app outside src/shared, with where they go in pwa/src. */
-const EXTRA = { 'src/renderer/src/lib/code-colors.ts': 'lib/code-colors.ts' }
+/**
+ * Files of the app outside src/shared, with where they go in pwa/src. What they import from `@shared/`
+ * comes along; their relative imports the PWA provides itself, in the same places (client/lib,
+ * client/server-link/link-store.ts).
+ */
+const EXTRA: Record<string, string> = {
+  'src/renderer/src/lib/code-colors.ts': 'lib/code-colors.ts',
+  'src/main/server-link/connection.ts': 'client/server-link/connection.ts',
+  'src/main/server-link/device-channel.ts': 'client/server-link/device-channel.ts',
+  'src/main/server-link/membership.ts': 'client/server-link/membership.ts',
+  'src/main/remote/remote-client.ts': 'client/remote/remote-client.ts',
+}
 /** Copies in the app whose originals live here. */
 const ORIGINALS: Record<string, string> = {
   'nexa-server/protocol.ts': 'src/protocol.ts',
@@ -45,9 +55,19 @@ if (!existsSync(sharedSource)) {
   process.exit(2)
 }
 
+const IMPORT = /(?:^|\n)\s*(?:import|export)\b[^'"]*?\bfrom\s+['"]([^'"]+)['"]/g
+const withTs = (path: string) => (path.endsWith('.ts') ? path : `${path}.ts`)
+
 /** Every file to write: path in pwa/src → its content. */
 const files = new Map<string, string>()
 const queue = [...SHARED_ENTRIES]
+for (const [from, to] of Object.entries(EXTRA)) {
+  const content = readFileSync(join(app, from), 'utf8')
+  files.set(to, content)
+  for (const match of content.matchAll(IMPORT)) {
+    if (match[1]!.startsWith('@shared/')) queue.push(withTs(match[1]!.slice('@shared/'.length)))
+  }
+}
 while (queue.length > 0) {
   const file = queue.shift()!
   const target = posix.join('shared', file)
@@ -55,14 +75,14 @@ while (queue.length > 0) {
   const source = ORIGINALS[file] ? join(root, ORIGINALS[file]) : join(sharedSource, file)
   const content = readFileSync(source, 'utf8')
   files.set(target, content)
-  for (const match of content.matchAll(/(?:^|\n)\s*(?:import|export)\b[^'"]*?\bfrom\s+['"](\.{1,2}\/[^'"]+)['"]/g)) {
-    let next = posix.normalize(posix.join(posix.dirname(file), match[1]!))
-    if (!next.endsWith('.ts')) next += '.ts'
-    if (next.startsWith('..')) throw new Error(`${file} importiert ${match[1]} außerhalb von src/shared.`)
+  for (const match of content.matchAll(IMPORT)) {
+    const specifier = match[1]!
+    if (!specifier.startsWith('.')) continue
+    const next = withTs(posix.normalize(posix.join(posix.dirname(file), specifier)))
+    if (next.startsWith('..')) throw new Error(`${file} importiert ${specifier} außerhalb von src/shared.`)
     queue.push(next)
   }
 }
-for (const [from, to] of Object.entries(EXTRA)) files.set(to, readFileSync(join(app, from), 'utf8'))
 
 let differing = 0
 for (const [path, content] of [...files].sort(([a], [b]) => a.localeCompare(b))) {

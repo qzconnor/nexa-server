@@ -109,8 +109,14 @@ die Chats der eigenen Computer, mit Eingabe für neue Prompts. Man kann sie zum 
 Sie koppelt sich wie jedes Gerät mit einem Kopplungscode, als Instanz mit der Rolle *Steuerung*. Aussehen
 und Themes sind die der Desktop-App.
 
-Stand: Gerüst mit Themes, Inbox und Chats als leere Seiten. Koppeln, Chats lesen und Prompts senden und die
-Inbox folgen.
+Gekoppelt wird mit dem Kopplungscode aus „Gerät hinzufügen“, eingefügt oder als Link
+`https://<domain>/app#nexa1:…` (etwa aus einem QR-Code). Den Teil hinter `#` schickt der Browser nie an den
+Server, und die Web-App nimmt ihn sofort aus der Adresszeile. Ihre privaten Schlüssel erzeugt sie im Browser
+als nicht exportierbar und legt sie in IndexedDB ab; benutzen kann sie sie, auslesen nicht, auch nicht ihr
+eigener Code.
+
+Stand: Koppeln, Abmelden und die Computer des Namespace mit dem, was sie dem Handy erlauben. Chats lesen und
+Prompts senden und die Inbox folgen.
 
 **Warum sie aus ist**: Für die Web-App ist der Server nicht blind. Sie hält wie jedes Gerät den Schlüssel
 des Namespace, ihren Code lädt der Browser aber bei jedem Start vom Server. Wer den Server übernimmt (oder

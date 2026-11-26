@@ -16,7 +16,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.vue"]
 }

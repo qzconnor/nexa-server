@@ -8,6 +8,8 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: '/app/',
   plugins: [vue(), tailwindcss()],
+  // The app's alias, so its client files (src/client) come over unchanged.
+  resolve: { alias: { '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)) } },
   build: {
     outDir: fileURLToPath(new URL('../dist/app', import.meta.url)),
     emptyOutDir: true,

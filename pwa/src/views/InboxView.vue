@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { CircleAlert, CircleCheck, Hand, LoaderCircle } from '@lucide/vue'
 import type { Component } from 'vue'
+import ConnectionBanner from '../components/ConnectionBanner.vue'
 import NotPaired from '../components/NotPaired.vue'
+import { linkState } from '../link'
 import { INBOX_SECTIONS, type InboxSection } from '../shared/inbox'
 
 const SECTIONS: Record<InboxSection, { title: string; empty: string; icon: Component; tone: string }> = {
@@ -16,7 +18,11 @@ const sections = INBOX_SECTIONS.map((id) => ({ id, ...SECTIONS[id] }))
 
 <template>
   <div class="mx-auto max-w-xl space-y-6 p-4">
-    <NotPaired />
+    <ConnectionBanner />
+    <NotPaired v-if="linkState.status === 'unpaired'" />
+    <p v-else-if="linkState.status !== 'loading'" class="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+      Hier erscheint bald, was auf deinen Computern auf dich wartet. Bis dahin findest du sie unter „Chats“.
+    </p>
     <section v-for="section in sections" :key="section.id" :aria-labelledby="`inbox-${section.id}`">
       <h2
         :id="`inbox-${section.id}`"

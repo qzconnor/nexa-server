@@ -1,6 +1,7 @@
-# nexa-server behind Caddy, which gets the certificate from Let's Encrypt. HTTPS is not optional:
+# nexa-server runs only as this container. In front of it there must be a reverse proxy with HTTPS:
 # invite codes travel in the join request, and the PWA's service worker and Web Push need it later.
-# Needs NEXA_DOMAIN (see .env.example); ports 80 and 443 must reach this machine.
+#   - Caddy (profile "caddy", see .env.example) gets its certificate from Let's Encrypt by itself.
+#   - nginx or another proxy on the host talks to 127.0.0.1:${NEXA_LOCAL_PORT}, see deploy/nginx.conf.
 services:
   server:
     build: .
@@ -8,16 +9,22 @@ services:
     restart: unless-stopped
     # tini as PID 1 forwards signals, so `docker compose stop` shuts the relay down cleanly.
     init: true
+    # Loopback only: reachable for a proxy on the host, never directly from the network.
+    ports:
+      - "127.0.0.1:${NEXA_LOCAL_PORT:-8080}:8080"
     environment:
       TZ: ${TZ:-Europe/Berlin}
       NEXA_MAX_INSTANCES: ${NEXA_MAX_INSTANCES:-20}
       NEXA_MAX_MESSAGE_KB: ${NEXA_MAX_MESSAGE_KB:-1024}
+      NEXA_RATE_LIMIT: ${NEXA_RATE_LIMIT:-100}
       NEXA_LOG_LEVEL: ${NEXA_LOG_LEVEL:-info}
     volumes:
       - data:/data
 
   caddy:
     image: caddy:2-alpine
+    profiles:
+      - caddy
     restart: unless-stopped
     depends_on:
       - server
@@ -26,7 +33,15 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      NEXA_DOMAIN: ${NEXA_DOMAIN:?NEXA_DOMAIN fehlt, siehe .env.example}
+      # Not ${NEXA_DOMAIN:?…}: compose checks that even with the profile off, which would break nginx setups.
+      NEXA_DOMAIN: ${NEXA_DOMAIN:-}
+    # An empty domain would turn the Caddyfile's site block into its global options and fail cryptically.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        if [ -z "$$NEXA_DOMAIN" ]; then echo "NEXA_DOMAIN fehlt, siehe .env.example" >&2; exit 1; fi;
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

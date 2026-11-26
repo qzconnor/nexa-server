@@ -6,6 +6,10 @@ Chiffretext, den die Geräte erzeugen. Konzept: `../nexa-app/docs/NEXA-SERVER.md
 
 ## Regeln
 
+- **Betrieb nur als Docker-Container** (`Dockerfile`, `docker-compose.yml` mit Caddy als Profil,
+  `deploy/nginx.conf` für nginx auf dem Host). Kein npm-Paket, kein `bin`, kein Betrieb mit lokalem Node;
+  Node lokal nur zum Entwickeln. Neue Einstellungen gehören auch in `docker-compose.yml`, `.env.example`
+  und die Tabelle im README.
 - **Sprache**: Doku, CLI-Ausgaben und Log-Zeilen Deutsch (mit echten Umlauten und „Anführungszeichen“).
   Code-Kommentare Englisch; sie erklären das Warum, nicht das Was. Fehlertexte im Protokoll (`message`)
   sind Englisch und für Entwickler, Clients übersetzen anhand von `code`.
@@ -25,6 +29,7 @@ npm run dev          # Server mit --watch, Daten in ./data
 npm run cli -- …     # Admin-CLI, z. B. npm run cli -- namespace create test
 npm run typecheck    # tsc --noEmit
 npm test             # Vitest, Tests liegen als *.test.ts neben dem Modul
+docker build -t nexa-server .   # Image wie im Betrieb
 ```
 
 Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.

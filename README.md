@@ -15,65 +15,89 @@ Stand: Phase 1, also Namespaces, Einladungen, Instanzen und das Relay über WebS
   Schlüsseln.
 - **Einladung**: ein einmaliger Code, mit dem sich ein Gerät in einen Namespace koppelt.
 
-## Betrieb mit Docker Compose
+## Betrieb
 
-Voraussetzung: eine Domain, die auf die Maschine zeigt, und offene Ports 80 und 443. Caddy holt das
-Zertifikat selbst.
+nexa-server läuft nur als Docker-Container. Davor gehört ein Reverse Proxy mit HTTPS, der WebSockets
+durchreicht; ohne HTTPS gingen die Einladungscodes im Klartext übers Netz. Zwei Wege sind vorbereitet.
+
+### Mit Caddy
+
+Der Standard: Caddy läuft als zweiter Container und holt das Zertifikat bei Let's Encrypt selbst.
+Voraussetzung sind eine Domain, die auf die Maschine zeigt, und freie, erreichbare Ports 80 und 443.
 
 ```sh
 cp .env.example .env              # NEXA_DOMAIN eintragen
 docker compose up -d --build
+```
+
+### Mit nginx auf dem Host
+
+1. `cp .env.example .env` und dort `COMPOSE_PROFILES` und `NEXA_DOMAIN` auskommentieren. Dann startet nur
+   der Server, erreichbar unter `127.0.0.1:8080` und nicht von außen.
+2. `docker compose up -d --build`
+3. [`deploy/nginx.conf`](deploy/nginx.conf) nach `/etc/nginx/conf.d/nexa-server.conf` kopieren, die Domain
+   eintragen, das Zertifikat holen (z. B. `certbot certonly --nginx -d nexa.example.com`) und
+   `nginx -t && systemctl reload nginx`.
+
+Andere Proxys (Traefik, HAProxy, ein vorhandener nginx) gehen genauso. Sie brauchen HTTPS, das
+WebSocket-Upgrade auf `/v1/ws` und einen Lese-Timeout über 30 Sekunden, denn so oft schickt der Server ein
+Ping. Läuft der Proxy selbst in einem Container, erreicht er den Server über ein gemeinsames Docker-Netz
+unter `server:8080`.
+
+### Erstes Gerät
+
+```sh
 docker compose exec server nexa-server namespace create connor
 ```
 
-Der letzte Befehl gibt einen Einladungscode aus. In Nexa trägt man ihn zusammen mit der Adresse des
-Servers ein (`https://nexa.example.com`); das ist das erste Gerät. Jedes weitere Gerät koppelt man von
-einem schon gekoppelten aus mit „Gerät hinzufügen“, dafür braucht es den Server nicht mehr.
+Der Befehl gibt einen Einladungscode aus. In Nexa trägt man ihn zusammen mit der Adresse des Servers ein
+(`https://nexa.example.com`); das ist das erste Gerät. Jedes weitere Gerät koppelt man von einem schon
+gekoppelten aus mit „Gerät hinzufügen“, dafür braucht es den Admin nicht mehr.
 
-Die Daten liegen im Volume `data` (eine SQLite-Datei, `/data/nexa-server.db`). Zum Sichern genügt diese
-Datei samt `-wal` und `-shm`, am besten bei gestopptem Server.
+### Daten, Sicherung, Aktualisierung
+
+Die Daten liegen im Volume `data`, eine SQLite-Datei mit ihren `-wal`- und `-shm`-Dateien. Sichern:
+
+```sh
+docker compose stop server
+docker compose cp server:/data ./backup
+docker compose start server
+```
 
 Aktualisieren: `git pull && docker compose up -d --build`.
 
-## Betrieb ohne Docker
-
-Node.js ab 24, kein Build-Schritt: Node führt die TypeScript-Quellen direkt aus.
-
-```sh
-npm ci --omit=dev
-NEXA_DATA_DIR=/var/lib/nexa-server npm start
-```
-
-Ohne `NEXA_HOST` hört der Server nur auf `127.0.0.1`. Davor gehört ein Reverse Proxy mit HTTPS (Caddy,
-nginx, Traefik), der auch WebSockets durchreicht. Ohne HTTPS gingen die Einladungscodes im Klartext
-übers Netz.
-
 ## Einstellungen
+
+In `.env` neben `docker-compose.yml`; Compose reicht sie an die Container weiter.
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `NEXA_HOST` | `127.0.0.1` (Docker: `0.0.0.0`) | Adresse, auf der der Server hört |
-| `NEXA_PORT` | `8080` | Port |
-| `NEXA_DATA_DIR` | `./data` (Docker: `/data`) | Ordner für die Datenbank |
+| `COMPOSE_PROFILES` | `caddy` | `caddy` startet Caddy mit; leer lassen für nginx oder einen anderen Proxy |
+| `NEXA_DOMAIN` | | Domain für Caddy |
+| `NEXA_LOCAL_PORT` | `8080` | Port auf `127.0.0.1`, auf den ein Proxy auf dem Host zeigt |
+| `TZ` | `Europe/Berlin` | Zeitzone, z. B. für die Zeiten in der CLI |
 | `NEXA_MAX_MESSAGE_KB` | `1024` | Größte Nachricht über WebSocket; eine größere trennt die Verbindung (1009) |
 | `NEXA_MAX_INSTANCES` | `20` | Instanzen je Namespace |
 | `NEXA_RATE_LIMIT` | `100` | Nachrichten je Sekunde und Verbindung, kurzzeitig doppelt so viele |
 | `NEXA_LOG_LEVEL` | `info` | `debug`, `info`, `warn` oder `error` |
 
+Adresse, Port und Datenordner im Container (`NEXA_HOST=0.0.0.0`, `NEXA_PORT=8080`, `NEXA_DATA_DIR=/data`)
+legt das Image fest.
+
 ## Admin-CLI
 
-Mit Docker steht vor jedem Befehl `docker compose exec server`. Ohne Docker ersetzt `npm run cli --` das
-`nexa-server`, also z. B. `npm run cli -- namespace list`.
+Vor jedem Befehl steht `docker compose exec server`, also z. B.
+`docker compose exec server nexa-server namespace list`.
 
 | Befehl | Was er tut |
 |---|---|
-| `nexa-server serve` | Startet den Server (im Container der Standard) |
 | `nexa-server namespace create <name>` | Legt einen Namespace an und gibt den ersten Einladungscode aus, 7 Tage gültig |
 | `nexa-server namespace list` | Namespaces mit der Zahl ihrer Instanzen und offenen Einladungen |
 | `nexa-server namespace delete <name> --yes` | Löscht einen Namespace mit allen Instanzen und Einladungen |
 | `nexa-server invite <namespace>` | Neuer Einladungscode, 7 Tage gültig, z. B. wenn alle Geräte weg sind |
 | `nexa-server instances <namespace>` | Instanzen mit Rolle und „zuletzt gesehen“ |
 | `nexa-server instance remove <id> --yes` | Entfernt eine Instanz; das Gerät muss neu gekoppelt werden |
+| `nexa-server serve` | Startet den Server; das tut der Container von selbst |
 
 Namen von Namespaces: 1 bis 32 Zeichen aus `a–z`, `0–9` und `-`, am Anfang kein `-`.
 
@@ -118,12 +142,16 @@ unter „Hinweise für Clients“.
 
 ## Entwicklung
 
+Lokal mit Node.js ab 24, nur zum Entwickeln. Es gibt keinen Build-Schritt: Node führt die
+TypeScript-Quellen direkt aus, auch im Image.
+
 ```sh
 npm install
-npm run dev          # Server mit Neustart bei Änderungen, Daten in ./data
+npm run dev                       # Server auf 127.0.0.1:8080 mit Neustart bei Änderungen, Daten in ./data
 npm run cli -- namespace create test
 npm run typecheck
 npm test
+docker build -t nexa-server .     # das Image, wie es im Betrieb läuft
 ```
 
 Aufbau und Regeln stehen in [`CLAUDE.md`](CLAUDE.md).

@@ -9,11 +9,7 @@
   "engines": {
     "node": ">=24"
   },
-  "bin": {
-    "nexa-server": "src/main.ts"
-  },
   "scripts": {
-    "start": "node src/main.ts serve",
     "dev": "node --watch src/main.ts serve",
     "cli": "node src/main.ts",
     "typecheck": "tsc --noEmit",

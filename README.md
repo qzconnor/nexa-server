@@ -115,8 +115,14 @@ Server, und die Web-App nimmt ihn sofort aus der Adresszeile. Ihre privaten Schl
 als nicht exportierbar und legt sie in IndexedDB ab; benutzen kann sie sie, auslesen nicht, auch nicht ihr
 eigener Code.
 
-Stand: Koppeln, Abmelden und die Computer des Namespace mit dem, was sie dem Handy erlauben. Chats lesen und
-Prompts senden und die Inbox folgen.
+Stand:
+- Koppeln und Abmelden. Die Computer des Namespace stehen mit dem, was sie dem Handy erlauben.
+- Die Chats eines Computers: Liste mit Suche, darin was gerade läuft, wartet oder ungelesen ist.
+- Einen Chat lesen, live: Antworten, Werkzeuge, Agents, Rückfragen, ältere Nachrichten beim Hochscrollen.
+- Ab der Stufe „Prompts senden“ eigene Prompts schicken und abbrechen.
+
+Die Inbox und das Beantworten von Rückfragen folgen, ebenso Bilder. Die Stufe stellt man am Computer unter
+Einstellungen › Geräte ein; ohne eigenen Eintrag darf die Web-App nur mitlesen.
 
 **Warum sie aus ist**: Für die Web-App ist der Server nicht blind. Sie hält wie jedes Gerät den Schlüssel
 des Namespace, ihren Code lädt der Browser aber bei jedem Start vom Server. Wer den Server übernimmt (oder
@@ -207,9 +213,13 @@ npm test
 docker compose up -d --build      # das Image lokal bauen statt aus der Registry laden
 ```
 
-Die Web-App übernimmt Code der Desktop-App (Themes, Chat-Modell, Remote Control, Umschlag, Mitglieder,
-Kopplungscode) als Kopie in `pwa/src/shared`, Byte für Byte. Dort nichts von Hand ändern, sondern in der App
-und danach `npm run sync:app`; `node scripts/sync-from-app.ts --check` zeigt Abweichungen.
+Die Web-App übernimmt Code der Desktop-App als Kopie, Byte für Byte:
+- in `pwa/src/shared` Themes, Chat-Modell, Remote Control, Umschlag, Mitglieder und Kopplungscode;
+- in `pwa/src/client` die Verbindung und die Mitgliedschaft;
+- in `pwa/src/lib/tools.ts` die Gruppierung der Chat-Einträge.
+
+Dort nichts von Hand ändern, sondern in der App und danach `npm run sync:app`.
+`node scripts/sync-from-app.ts --check` zeigt Abweichungen.
 
 `.github/workflows/docker.yml` führt bei jedem Push und Pull Request Typecheck und Tests aus. Bei Pushes
 auf `main` und bei Tags `v*` baut er danach das Image und legt es in der Registry ab.

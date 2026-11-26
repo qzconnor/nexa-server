@@ -22,9 +22,11 @@ Chiffretext, den die Geräte erzeugen. Konzept: `../nexa-app/docs/NEXA-SERVER.md
   `docs/PROTOCOL.md`. Was nicht abwärtskompatibel ist, braucht eine neue Version (`/v2/…`).
 - **`src/protocol.ts` und `src/auth.ts` bleiben ohne Node-APIs** (nur WebCrypto, `TextEncoder`,
   `btoa`/`atob`), weil die App und die PWA sie übernehmen.
-- **`pwa/src/shared/` und die Kopien in `pwa/src/client/` nie von Hand ändern**: Code der App, Byte für Byte
-  (welche Dateien: `pwa/src/client/README.md`), abgeglichen mit `npm run sync:app`. Änderungen gehören in die
-  App (bzw. nach `src/protocol.ts`, `src/auth.ts`).
+- **`pwa/src/shared/`, die Kopien in `pwa/src/client/` und `pwa/src/lib/{tools,code-colors}.ts` nie von Hand
+  ändern**: Code der App, Byte für Byte (Liste: `EXTRA` in `scripts/sync-from-app.ts`), abgeglichen mit
+  `npm run sync:app`. Änderungen gehören in die App (bzw. nach `src/protocol.ts`, `src/auth.ts`).
+- **Markdown nur über `pwa/src/lib/markdown.ts`** (markdown-it mit `html: false`): Nur so ist `v-html` sicher,
+  Antworten der Agents können beliebiges HTML enthalten.
 - **Web-App (`NEXA_PWA`) bleibt standardmäßig aus**: Für sie ist der Server nicht blind (er liefert ihren
   Code, sie hält den Schlüssel). Die CSP in `src/pwa.ts` nicht lockern, kein Inline-Skript, kein
   `'unsafe-inline'`, kein Code von fremden Hosts.
@@ -74,7 +76,8 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
 - `src/auth.ts`: Import öffentlicher Schlüssel, Signatur der Anmeldung, base64url.
 - `pwa/`: die Web-App (`index.html`, `vite.config.ts`, `src/` mit Ansichten, Router, Theme, `shared/`).
   `pwa/src/client/`: Verbindung zu Server und Computern, teils Kopien aus der App, teils eigen (IndexedDB,
-  Koppeln als `controller`).
+  Koppeln als `controller`). `pwa/src/host-store.ts`: der gezeigte Computer (Chats, Laufzustände, offene
+  Chats, Ereignisse), wie `stores/sessions.ts` der App; `pwa/src/components/chat/`: die Zeitleiste eines Chats.
 - `scripts/sync-from-app.ts`: kopiert den geteilten Code aus der App nach `pwa/src/shared`.
 
 ## Konventionen

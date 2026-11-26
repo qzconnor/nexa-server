@@ -38,6 +38,12 @@ link.on('deviceStatus', (id, online) => {
   // Back: ask again once it is a member (a `changed` follows); its settings may be others now.
   if (online) asked.delete(id)
 })
+// Each renewal of a watch says it again: a level changed at the computer shows without asking.
+remote.on('info', (id, info) => {
+  const before = hosts.get(id)?.info
+  // Refused (off, or not even reading): the client knows the level, not the name.
+  hosts.set(id, { info: { ...info, name: info.name || before?.name || '', version: info.version || before?.version || '' }, error: null, asking: false })
+})
 
 /** Asks each computer that is online and a member, once per login, what it lets this device do. */
 function askHosts(): void {

@@ -3,14 +3,24 @@
  * the desktop app and the PWA will talk to it.
  */
 
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join as joinPath } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { exportPublicKey, signAuth, type Key } from './auth.ts'
+import { ConfigError } from './config.ts'
 import { silentLogger } from './log.ts'
 import { CloseCode, type ServerMessage } from './protocol.ts'
 import { startServer, type RunningServer, type ServerOptions } from './server.ts'
 import { Store } from './store.ts'
 
-const CONFIG: ServerOptions['config'] = { host: '127.0.0.1', port: 0, maxMessageBytes: 64 * 1024, rateLimit: 1000 }
+const CONFIG: ServerOptions['config'] = {
+  host: '127.0.0.1',
+  port: 0,
+  maxMessageBytes: 64 * 1024,
+  rateLimit: 1000,
+  pwa: false,
+}
 
 let store: Store
 let server: RunningServer
@@ -136,7 +146,7 @@ describe('HTTP', () => {
     for (const path of ['/', '/v1/info']) {
       const response = await fetch(server.url + path)
       expect(response.status).toBe(200)
-      expect(await response.json()).toMatchObject({ name: 'nexa-server', protocol: 1, version: expect.any(String) })
+      expect(await response.json()).toMatchObject({ name: 'nexa-server', protocol: 1, version: expect.any(String), pwa: false })
     }
     expect(await (await fetch(`${server.url}/health`)).json()).toEqual({ status: 'ok', connections: 0 })
   })
@@ -461,5 +471,79 @@ describe('shutdown', () => {
     await server.close()
     expect((await client.closed).code).toBe(1001)
     server = await startServer({ config: CONFIG, store, log: silentLogger })
+  })
+})
+
+describe('web app', () => {
+  const SCRIPT = `console.log(${JSON.stringify('nexa '.repeat(400))})`
+  let dir: string
+  let app: RunningServer
+
+  beforeEach(async () => {
+    dir = mkdtempSync(joinPath(tmpdir(), 'nexa-server-pwa-'))
+    mkdirSync(joinPath(dir, 'assets'))
+    writeFileSync(joinPath(dir, 'index.html'), '<!doctype html><title>Nexa</title>')
+    writeFileSync(joinPath(dir, 'manifest.webmanifest'), '{"name":"Nexa"}')
+    writeFileSync(joinPath(dir, 'assets', 'index-a1b2c3.js'), SCRIPT)
+    app = await startServer({ config: { ...CONFIG, pwa: true }, store, log: silentLogger, pwaDir: dir })
+  })
+
+  afterEach(async () => {
+    await app.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('is not there unless switched on', async () => {
+    expect((await fetch(`${server.url}/app/`)).status).toBe(404)
+    expect(await (await fetch(`${app.url}/v1/info`)).json()).toMatchObject({ pwa: true })
+  })
+
+  it('refuses to start switched on but not built', async () => {
+    const empty = joinPath(dir, 'assets')
+    await expect(startServer({ config: { ...CONFIG, pwa: true }, store, log: silentLogger, pwaDir: empty })).rejects.toThrow(
+      ConfigError,
+    )
+  })
+
+  it('serves the page with a strict policy and without CORS', async () => {
+    const redirect = await fetch(`${app.url}/app?x=1`, { redirect: 'manual' })
+    expect(redirect.status).toBe(301)
+    expect(redirect.headers.get('location')).toBe('/app/?x=1')
+
+    const page = await fetch(`${app.url}/app/`)
+    expect(page.status).toBe(200)
+    expect(page.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(await page.text()).toContain('<title>Nexa</title>')
+    const csp = page.headers.get('content-security-policy') ?? ''
+    expect(csp).toContain(`default-src 'none'`)
+    expect(csp).toContain(`script-src 'self'`)
+    expect(csp).toContain(`frame-ancestors 'none'`)
+    expect(csp).toContain(`connect-src 'self' wss://127.0.0.1:${app.port}`)
+    expect(page.headers.get('x-frame-options')).toBe('DENY')
+    expect(page.headers.get('cache-control')).toBe('no-cache')
+    expect(page.headers.has('access-control-allow-origin')).toBe(false)
+    expect((await fetch(`${app.url}/app/`, { method: 'POST' })).status).toBe(405)
+  })
+
+  it('answers routes of the app with the page, and missing files with 404', async () => {
+    expect(await (await fetch(`${app.url}/app/chats/abc`)).text()).toContain('<title>Nexa</title>')
+    expect((await fetch(`${app.url}/app/assets/index-old.js`)).status).toBe(404)
+    expect((await fetch(`${app.url}/app/..%2fpackage.json`)).status).toBe(404)
+    expect((await fetch(`${app.url}/app/%E0%A4%A`)).status).toBe(404)
+  })
+
+  it('caches assets for good, compresses them and revalidates the rest', async () => {
+    const asset = await fetch(`${app.url}/app/assets/index-a1b2c3.js`, { headers: { 'accept-encoding': 'gzip' } })
+    expect(asset.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
+    expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(asset.headers.get('content-encoding')).toBe('gzip')
+    expect(await asset.text()).toBe(SCRIPT)
+
+    const manifest = await fetch(`${app.url}/app/manifest.webmanifest`)
+    expect(manifest.headers.get('content-type')).toBe('application/manifest+json; charset=utf-8')
+    const etag = manifest.headers.get('etag')!
+    expect(etag).toMatch(/^"[\w-]+"$/)
+    const again = await fetch(`${app.url}/app/manifest.webmanifest`, { headers: { 'if-none-match': `W/${etag}` } })
+    expect(again.status).toBe(304)
   })
 })

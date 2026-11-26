@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * The same tokens as the desktop app (nexa-app src/renderer/src/assets/main.css). The values in :root
+ * are only the first paint, in the default theme (Ember); theme.ts sets every token on <html>.
+ */
+
+@theme inline {
+  --font-sans: 'Geist Variable', system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-code: var(--code-bg);
+  --color-code-foreground: var(--code-fg);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+}
+
+:root {
+  --background: #1c1917;
+  --foreground: #ece6e1;
+  --card: color-mix(in oklab, #28231f 80%, transparent);
+  --card-foreground: #ece6e1;
+  --popover: #221e1b;
+  --popover-foreground: #ece6e1;
+  --primary: #d97757;
+  --primary-foreground: #1f130e;
+  --secondary: color-mix(in oklab, #ece6e1 9%, transparent);
+  --secondary-foreground: #ece6e1;
+  --muted: color-mix(in oklab, #ece6e1 7%, transparent);
+  --muted-foreground: #a8a19b;
+  --accent: color-mix(in oklab, #ece6e1 10%, transparent);
+  --accent-foreground: #ece6e1;
+  --destructive: #ef6b5b;
+  --border: color-mix(in oklab, #ece6e1 11%, transparent);
+  --input: color-mix(in oklab, #ece6e1 15%, transparent);
+  --ring: color-mix(in oklab, #d97757 65%, transparent);
+  --chart-1: #d97757;
+  --chart-2: #7fa8e8;
+  --chart-3: #9fcf7a;
+  --chart-4: #e8b85c;
+  --chart-5: #d58fd0;
+  --surface: color-mix(in oklab, #28231f 72%, transparent);
+  --surface-strong: color-mix(in oklab, #28231f 90%, transparent);
+  --surface-solid: color-mix(in oklab, #28231f 72%, #1c1917);
+  --success: #9fcf7a;
+  --warning: #e8b85c;
+  --window-bg: color-mix(in oklab, #1c1917 72%, transparent);
+  --code-bg: color-mix(in oklab, #1c1917 82%, transparent);
+  --code-fg: #e7e1dc;
+  /* The app's default (Einstellungen › Darstellung). */
+  --radius: 0.625rem;
+  /* Heights of the bars over the page, without the safe areas of the phone. */
+  --header-height: 3rem;
+  --tabbar-height: 3.5rem;
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+    overflow: hidden;
+  }
+  html {
+    font-size: 15px;
+    background: var(--background);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /*
+   * The stand-in for the desktop's window material: soft light in the theme's colours, which the
+   * translucent layers above tint and the glass of the bars blurs. #app is the window's tint over it.
+   */
+  body {
+    @apply text-foreground font-sans antialiased;
+    overscroll-behavior: none;
+    background:
+      radial-gradient(80% 55% at 0% 0%, var(--primary), transparent 75%),
+      radial-gradient(70% 50% at 100% 45%, color-mix(in oklab, var(--chart-2) 85%, transparent), transparent 75%),
+      radial-gradient(80% 55% at 15% 100%, color-mix(in oklab, var(--chart-5) 80%, transparent), transparent 75%),
+      var(--background);
+  }
+  #app {
+    background: var(--window-bg);
+  }
+  :where(button:not(:disabled), [role='button'], [role='tab'], [role='radio'], a[href], summary, select) {
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  /* Frosted glass, as in the desktop app: what scrolls beneath shows through, blurred. */
+  .glass {
+    background: var(--surface);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    backdrop-filter: blur(24px) saturate(140%);
+  }
+  /* Room for the bars, which float over the page so it scrolls beneath their glass. */
+  .pt-header {
+    padding-top: calc(var(--header-height) + env(safe-area-inset-top));
+  }
+  .pb-tabbar {
+    padding-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom));
+  }
+  /* The notch, the home indicator and the rounded corners of a phone in standalone mode. */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .px-safe {
+    padding-left: max(env(safe-area-inset-left), 0px);
+    padding-right: max(env(safe-area-inset-right), 0px);
+  }
+}

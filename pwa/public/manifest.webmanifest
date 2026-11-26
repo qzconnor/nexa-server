@@ -1,0 +1,17 @@
+{
+  "id": "/app/",
+  "name": "Nexa",
+  "short_name": "Nexa",
+  "description": "Die eigenen Nexa-Computer vom Handy aus steuern",
+  "lang": "de",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c1917",
+  "theme_color": "#1c1917",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

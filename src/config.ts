@@ -13,6 +13,8 @@ export interface Config {
   /** Messages per second and connection; bursts up to twice as many. */
   rateLimit: number
   logLevel: LogLevel
+  /** Serve the web app at `/app`; off by default, see README („Web-App“). */
+  pwa: boolean
 }
 
 export class ConfigError extends Error {
@@ -36,7 +38,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxInstances: integer(env, 'NEXA_MAX_INSTANCES', 20, 1, 1000),
     rateLimit: integer(env, 'NEXA_RATE_LIMIT', 100, 1, 100_000),
     logLevel,
+    pwa: flag(env, 'NEXA_PWA'),
   }
+}
+
+function flag(env: NodeJS.ProcessEnv, name: string): boolean {
+  const raw = env[name]?.trim().toLowerCase()
+  if (raw === undefined || raw === '' || ['0', 'false', 'off', 'no'].includes(raw)) return false
+  if (['1', 'true', 'on', 'yes'].includes(raw)) return true
+  throw new ConfigError(`${name} muss „true“ oder „false“ sein, ist „${env[name]}“.`)
 }
 
 function integer(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {

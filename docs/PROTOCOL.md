@@ -82,7 +82,8 @@ den Typ. Binär-Frames lehnt der Server ab.
 ```
 Server → { "t": "hello", "v": 1, "nonce": "<32 Byte, base64url>" }
 Client → { "t": "auth", "instance": "<ID>", "sig": "<Signatur>" }
-Server → { "t": "ready", "instance": "<ID>", "namespace": "connor", "instances": [InstanceInfo, …] }
+Server → { "t": "ready", "instance": "<ID>", "namespace": "connor", "instances": [InstanceInfo, …],
+           "limits": { "maxMessageBytes": 1048576, "rateLimit": 100 } }
 ```
 
 - `sig` ist ECDSA mit P-256 und SHA-256 über die UTF-8-Bytes von `nexa-server/auth/v1:<nonce>`, im Format
@@ -91,6 +92,16 @@ Server → { "t": "ready", "instance": "<ID>", "namespace": "connor", "instances
 - Vor `ready` darf der Client nur dieses eine `auth` senden, auch nicht während der Server die Signatur
   prüft.
 - `instances` enthält alle Instanzen des Namespace, die eigene eingeschlossen.
+- `limits` nennt die Grenzen dieses Servers, wie der Admin sie eingestellt hat. Clients richten die Größe
+  und die Zahl ihrer Nachrichten danach:
+
+  | Feld | Bedeutung |
+  |---|---|
+  | `maxMessageBytes` | Größte Nachricht, die ein Client senden darf: das ganze JSON in UTF-8-Bytes. Eine größere schließt die Verbindung mit 1009 (`NEXA_MAX_MESSAGE_KB`) |
+  | `rateLimit` | Nachrichten je Sekunde und Verbindung, kurzzeitig doppelt so viele. Darüber verwirft der Server sie mit `rate-limited` (`NEXA_RATE_LIMIT`) |
+
+  Ältere Server ohne `limits` haben 1 MB und 100 Nachrichten je Sekunde, sofern der Admin nichts geändert
+  hat.
 
 `InstanceInfo`:
 

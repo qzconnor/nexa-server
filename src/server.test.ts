@@ -201,6 +201,16 @@ describe('login', () => {
     expect(ready.instances[0]).toMatchObject({ role: 'host', signKey: expect.any(String), dhKey: expect.any(String) })
   })
 
+  it('announces the configured limits in ready', async () => {
+    const { ready } = await online(await join('alpha'))
+    expect(ready.limits).toEqual({ maxMessageBytes: 64 * 1024, rateLimit: 1000 })
+
+    await server.close()
+    server = await startServer({ config: { ...CONFIG, maxMessageBytes: 4096, rateLimit: 7 }, store, log: silentLogger })
+    const { ready: other } = await online(await join('alpha'))
+    expect(other.limits).toEqual({ maxMessageBytes: 4096, rateLimit: 7 })
+  })
+
   it('closes with 4401 on a wrong signature', async () => {
     const a = await join('alpha')
     const client = await connect(a, (await newKeys()).privateKey)

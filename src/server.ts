@@ -54,6 +54,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const relay = new Relay({
     store,
     log,
+    maxMessageBytes: config.maxMessageBytes,
     rateLimit: config.rateLimit,
     maxBufferedBytes: config.maxMessageBytes * 16,
     authTimeoutMs: options.authTimeoutMs,

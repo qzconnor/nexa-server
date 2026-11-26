@@ -19,6 +19,7 @@ import {
   type ErrorCode,
   type InstanceInfo,
   type RelayedMessage,
+  type ServerLimits,
   type ServerMessage,
 } from './protocol.ts'
 import type { InstanceRecord, Store } from './store.ts'
@@ -26,6 +27,8 @@ import type { InstanceRecord, Store } from './store.ts'
 export interface RelayOptions {
   store: Store
   log: Logger
+  /** The WebSocket server enforces it (`maxPayload`); the relay only announces it in `ready`. */
+  maxMessageBytes: number
   /** Messages per second and connection; bursts up to twice as many. */
   rateLimit: number
   /** Above this many unsent bytes a receiver counts as `busy`, so one slow reader cannot fill memory. */
@@ -49,6 +52,7 @@ export class Relay {
   readonly #store: Store
   readonly #log: Logger
   readonly #rate: number
+  readonly #limits: ServerLimits
   readonly #maxBuffered: number
   readonly #authTimeoutMs: number
   readonly #inviteTtlMs: number
@@ -61,6 +65,7 @@ export class Relay {
     this.#store = options.store
     this.#log = options.log
     this.#rate = options.rateLimit
+    this.#limits = { maxMessageBytes: options.maxMessageBytes, rateLimit: options.rateLimit }
     this.#maxBuffered = options.maxBufferedBytes
     this.#authTimeoutMs = options.authTimeoutMs ?? 10_000
     this.#inviteTtlMs = options.inviteTtlMs ?? 15 * 60_000
@@ -197,6 +202,7 @@ export class Relay {
       instance: record.id,
       namespace: record.namespace,
       instances: this.#instances(record.namespace),
+      limits: { ...this.#limits },
     })
     if (!previous) {
       this.#broadcast(record.namespace, { t: 'instance', event: 'online', instance: this.#info(record) }, record.id)

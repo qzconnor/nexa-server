@@ -156,6 +156,15 @@ export interface ReadyMessage {
   namespace: string
   /** All instances of the namespace, this one included. */
   instances: InstanceInfo[]
+  /** What this server allows a connection; clients size their messages by it. */
+  limits: ServerLimits
+}
+
+export interface ServerLimits {
+  /** Largest message a client may send, in bytes, the whole JSON (`maxPayload`); larger closes the connection. */
+  maxMessageBytes: number
+  /** Messages per second per connection (bursts up to twice as many); beyond it they are dropped (`rate-limited`). */
+  rateLimit: number
 }
 
 export interface RelayedMessage {

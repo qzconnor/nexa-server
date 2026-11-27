@@ -13,14 +13,16 @@ const attention = inbox.attention
 const tabs = [
   { id: 'inbox', to: '/', label: 'Inbox', icon: Inbox },
   { id: 'chats', to: '/chats', label: 'Chats', icon: MessagesSquare },
+  { id: 'settings', to: '/settings', label: 'Einstellungen', icon: Settings },
 ] as const
 
 const title = computed(() => pageTitle.value?.text ?? route.meta.title)
 
 function back(): void {
-  // Opened directly (a link, the home screen): the page above it, not out of the app.
+  // Opened directly (a link, the home screen): the page above it, not out of the app. A page right
+  // below the root (/pair) goes to its tab.
   if (window.history.state?.back) router.back()
-  else void router.replace(route.path.split('/').slice(0, -1).join('/') || '/')
+  else void router.replace(route.path.split('/').slice(0, -1).join('/') || tabs.find((t) => t.id === route.meta.tab)?.to || '/')
 }
 </script>
 
@@ -39,14 +41,6 @@ function back(): void {
           <ChevronLeft class="size-5" />
         </button>
         <h1 class="min-w-0 flex-1 truncate px-2 text-base font-semibold">{{ title }}</h1>
-        <RouterLink
-          v-if="!route.meta.back"
-          to="/settings"
-          class="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="Einstellungen"
-        >
-          <Settings class="size-5" />
-        </RouterLink>
       </div>
     </header>
 
@@ -58,17 +52,24 @@ function back(): void {
       <RouterView />
     </main>
 
-    <!-- A dock like the app's composer, as wide as the pages' cards (p-4 in max-w-xl); the page shows around it. -->
+    <!--
+      A dock like the app's composer, as wide as the pages' cards (p-4 in max-w-xl); the page shows around
+      and through it. The active tab sits on a pane of its own, rounded like the dock less its padding.
+    -->
     <nav v-if="!route.meta.fullscreen" class="bottom-dock px-safe pointer-events-none absolute inset-x-0 z-10" aria-label="Bereiche">
       <div
-        class="glass pointer-events-auto mx-4 grid h-(--tabbar-height) grid-cols-2 rounded-2xl border border-border shadow-lg shadow-black/25 sm:mx-auto sm:max-w-[34rem]"
+        class="glass floating pointer-events-auto mx-4 grid h-(--tabbar-height) grid-cols-3 gap-1 rounded-[1.375rem] border border-foreground/10 p-1.5 sm:mx-auto sm:max-w-[34rem]"
       >
         <RouterLink
           v-for="tab in tabs"
           :key="tab.id"
           :to="tab.to"
-          class="flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors"
-          :class="route.meta.tab === tab.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground'"
+          class="flex flex-col items-center justify-center gap-0.5 rounded-[1rem] border text-[11px] font-medium transition-colors duration-200"
+          :class="
+            route.meta.tab === tab.id
+              ? 'border-foreground/10 bg-foreground/10 text-foreground shadow-sm'
+              : 'border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
+          "
           :aria-current="route.meta.tab === tab.id ? 'page' : undefined"
         >
           <span class="relative">

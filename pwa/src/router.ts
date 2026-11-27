@@ -10,7 +10,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     title: string
     /** The tab of the bottom bar the page belongs to. */
-    tab?: 'inbox' | 'chats'
+    tab?: 'inbox' | 'chats' | 'settings'
     /** A page under another one: a back button instead of the settings. */
     back?: boolean
     /** The page takes the whole height below the header, without the bar (a chat with its composer). */
@@ -31,8 +31,8 @@ export const router = createRouter({
       props: true,
       meta: { title: 'Chat', tab: 'chats', back: true, fullscreen: true },
     },
-    { path: '/settings', name: 'settings', component: SettingsView, meta: { title: 'Einstellungen', back: true } },
-    { path: '/pair', name: 'pair', component: PairView, meta: { title: 'Koppeln', back: true } },
+    { path: '/settings', name: 'settings', component: SettingsView, meta: { title: 'Einstellungen', tab: 'settings' } },
+    { path: '/pair', name: 'pair', component: PairView, meta: { title: 'Koppeln', tab: 'settings', back: true } },
     { path: '/:rest(.*)*', redirect: '/' },
   ],
 })

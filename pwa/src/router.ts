@@ -28,7 +28,8 @@ export const router = createRouter({
       path: '/chats/:host',
       redirect: (to) => {
         chooseComputer(String(to.params.host))
-        return { name: 'chats' }
+        // By path: a named target would get the `host` param it doesn't have (vue-router warns).
+        return { path: '/chats' }
       },
     },
     {

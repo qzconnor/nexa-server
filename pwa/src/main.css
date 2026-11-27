@@ -93,6 +93,7 @@
   --syn-blue: #7fa8e8;
   --syn-magenta: #d58fd0;
   --syn-cyan: #6fc7c0;
+  --syn-comment: color-mix(in oklab, #ece6e1 50%, transparent);
   /* The app's default (Einstellungen › Darstellung). */
   --radius: 0.625rem;
   /* Heights of the bars over the page, without the safe areas of the phone. */
@@ -382,6 +383,28 @@
     line-height: 1.5;
     white-space: pre;
   }
+  /* Diff lines of an edit (DiffView.vue), as in the app. */
+  .diff-line {
+    white-space: pre;
+    min-height: 1.45em;
+  }
+  .diff-line[data-kind='add'] {
+    background: color-mix(in oklab, var(--success) 14%, transparent);
+  }
+  .diff-line[data-kind='del'] {
+    background: color-mix(in oklab, var(--destructive) 14%, transparent);
+  }
+  .diff-line[data-kind='hunk'] {
+    color: var(--muted-foreground);
+    background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  }
+  .diff-gutter {
+    user-select: none;
+    color: var(--muted-foreground);
+    text-align: right;
+    padding-inline: 0.5rem;
+    opacity: 0.7;
+  }
 
   /* The floating panes (FloatingPane.vue): rows as the app's menu items, only taller for a finger. */
   .menu-row {
@@ -437,4 +460,74 @@
   to {
     background-position: 200% 0;
   }
+}
+
+/* Code in a file's diff (highlight.js, lib/syntax.ts), in the colours of the terminal's theme as in the
+   app: theme.ts sets `--syn-*` from its palette, so every theme (light ones too) brings its own. */
+.syntax .hljs-keyword,
+.syntax .hljs-doctag,
+.syntax .hljs-meta .hljs-keyword,
+.syntax .hljs-template-tag,
+.syntax .hljs-selector-pseudo {
+  color: var(--syn-magenta);
+}
+.syntax .hljs-string,
+.syntax .hljs-meta .hljs-string,
+.syntax .hljs-addition,
+.syntax .hljs-code,
+.syntax .hljs-char.escape_ {
+  color: var(--syn-green);
+}
+.syntax .hljs-number,
+.syntax .hljs-literal,
+.syntax .hljs-bullet,
+.syntax .hljs-selector-class,
+.syntax .hljs-title.class_,
+.syntax .hljs-title.class_.inherited__ {
+  color: var(--syn-yellow);
+}
+.syntax .hljs-title,
+.syntax .hljs-title.function_,
+.syntax .hljs-section,
+.syntax .hljs-selector-id {
+  color: var(--syn-blue);
+}
+.syntax .hljs-built_in,
+.syntax .hljs-type,
+.syntax .hljs-meta,
+.syntax .hljs-regexp,
+.syntax .hljs-symbol,
+.syntax .hljs-link,
+.syntax .hljs-selector-attr,
+.syntax .hljs-variable.constant_ {
+  color: var(--syn-cyan);
+}
+.syntax .hljs-attr,
+.syntax .hljs-attribute,
+.syntax .hljs-property,
+.syntax .hljs-name,
+.syntax .hljs-selector-tag,
+.syntax .hljs-variable.language_,
+.syntax .hljs-template-variable,
+.syntax .hljs-deletion {
+  color: var(--syn-red);
+}
+/* In markup (HTML, Vue, JSX) the attributes stand apart from the tag's name. */
+.syntax .hljs-tag .hljs-attr {
+  color: var(--syn-yellow);
+}
+.syntax .hljs-comment,
+.syntax .hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+.syntax .hljs-emphasis {
+  font-style: italic;
+}
+.syntax .hljs-strong,
+.syntax .hljs-section {
+  font-weight: 600;
+}
+.syntax .hljs-link {
+  text-decoration: underline;
 }

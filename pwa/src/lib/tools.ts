@@ -1,5 +1,5 @@
 // The PWA of nexa-server copies this file byte for byte: imports only from `@shared/…`, `@lucide/vue`
-// and types from `vue`, no Node APIs, no new `--tool-*` colours (main/server-link/pwa-copies.test.ts).
+// and `vue`, no Node APIs, no new `--tool-*` colours (main/server-link/pwa-copies.test.ts).
 import {
   BotIcon,
   ChartColumnIcon,

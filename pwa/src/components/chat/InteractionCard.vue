@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Check, CircleHelp, ClipboardList, Map as MapIcon, Plug, ShieldQuestion, X } from '@lucide/vue'
 import { computed, inject, ref } from 'vue'
-import { CHANGE_LABEL, changeLines } from '../../lib/diff-lines'
 import type { InteractionItem, InteractionResponse, PermissionMode } from '../../shared/chat'
 import { PERMISSION_MODES } from '../../shared/providers'
 import { REMOTE_LEVEL_LABELS } from '../../shared/remote'
 import AskForm from './AskForm.vue'
+import DiffView from './DiffView.vue'
 import ElicitationForm from './ElicitationForm.vue'
 import MarkdownText from './MarkdownText.vue'
 import QuestionForm from './QuestionForm.vue'
@@ -153,13 +153,7 @@ const heading = computed(() => {
       <template v-if="request.type === 'permission'">
         <p v-if="request.description" class="text-muted-foreground">{{ request.description }}</p>
         <pre v-if="request.detail && !request.changes?.length" class="code-block max-h-48 whitespace-pre-wrap">{{ request.detail }}</pre>
-        <div v-for="change in request.changes ?? []" :key="change.path" class="space-y-1">
-          <p class="font-mono text-xs break-all">
-            {{ change.movePath ? `${change.path} → ${change.movePath}` : change.path }}
-            <span class="text-muted-foreground">({{ CHANGE_LABEL[change.type] }})</span>
-          </p>
-          <pre v-if="change.diff || change.oldText || change.newText" class="code-block max-h-72"><span v-for="(line, i) in changeLines(change)" :key="i" class="block" :class="line.tone">{{ line.text || ' ' }}</span></pre>
-        </div>
+        <DiffView v-for="change in request.changes ?? []" :key="change.path" :change="change" max-height="18rem" />
         <p v-if="request.reason" class="text-xs text-muted-foreground">{{ request.reason }}</p>
         <template v-if="allowed">
           <textarea v-if="showDeny" v-model="denyText" class="field min-h-16" placeholder="Was soll der Agent stattdessen tun? (optional)" />

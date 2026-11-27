@@ -1,3 +1,5 @@
+// The PWA of nexa-server copies this file byte for byte: no Node APIs, no new relative imports
+// (pwa-copies.test.ts).
 import type { Key } from '@shared/nexa-server/auth'
 import { openSealed, pairwiseKey, PAIRWISE, parseSealed, randomMessageId, seal, verifyOpened } from '@shared/nexa-server/envelope'
 import { ReplayGuard, type Member } from '@shared/nexa-server/members'

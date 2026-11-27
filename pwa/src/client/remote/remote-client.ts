@@ -1,3 +1,5 @@
+// The PWA of nexa-server copies this file byte for byte: no Node APIs, no new relative imports
+// (../server-link/pwa-copies.test.ts).
 import {
   applyDiff,
   parseRemoteEvents,

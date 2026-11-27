@@ -204,6 +204,7 @@ const CHECKS: Record<string, Check> = {
   'notifications.minBusySeconds': slider('notifications.minBusySeconds', true),
   'notifications.nearLimitPercent': slider('notifications.nearLimitPercent', true),
   'notifications.when': oneOf(['background', 'hidden']),
+  'notifications.push': oneOf(['off', 'away', 'always']),
   'api.port': inRange(1024, 65535, true),
 }
 

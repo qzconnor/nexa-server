@@ -47,6 +47,10 @@ export type ErrorCode =
   | 'invite-invalid'
   /** Join: the namespace has as many instances as the server allows. */
   | 'namespace-full'
+  /** Push: the instance has no push subscription, or its push service dropped it. */
+  | 'unsubscribed'
+  /** Push: the payload would exceed what a push carries (`MAX_PUSH_PAYLOAD`). */
+  | 'too-large'
   | 'internal'
 
 /** An instance as the server shows it to the instances of its namespace. */
@@ -73,6 +77,8 @@ export interface ServerInfo {
   protocol: typeof PROTOCOL_VERSION
   /** Whether this server serves the web app at `/app` (`NEXA_PWA`); a QR link to it only works then. */
   pwa: boolean
+  /** The server's VAPID public key (P-256, raw, base64url) for `pushManager.subscribe`; missing without push. */
+  vapidKey?: string
 }
 
 /** Body of `POST /v1/join`. */
@@ -92,7 +98,7 @@ export interface JoinResponse {
 
 /** Body of every HTTP error. */
 export interface HttpError {
-  error: ErrorCode | 'not-found' | 'method-not-allowed' | 'unsupported-media-type' | 'too-large'
+  error: ErrorCode | 'not-found' | 'method-not-allowed' | 'unsupported-media-type'
   message: string
 }
 
@@ -141,7 +147,58 @@ export interface RenameRequest {
   name: string
 }
 
-export type ClientRequest = SendMessage | InviteRequest | InstancesRequest | RemoveRequest | RenameRequest
+/** Register this instance's Web Push subscription; a new one replaces the old. */
+export interface PushSubscribeRequest {
+  t: 'push-subscribe'
+  id: string
+  /** The push service's URL, `https:` only; the server takes only push services it knows. */
+  endpoint: string
+  /** The subscription's P-256 public key (65 bytes) and auth secret (16 bytes), base64url. */
+  p256dh: string
+  auth: string
+}
+
+export interface PushUnsubscribeRequest {
+  t: 'push-unsubscribe'
+  id: string
+}
+
+export type PushUrgency = 'normal' | 'high'
+
+/**
+ * Push `body` to one instance by Web Push. The payload is the JSON of the `msg` a `send` with the same
+ * `id`, `kind` and `body` would relay, so the receiver opens it the same way. Answered with `ok` once the
+ * push service took it.
+ */
+export interface PushRequest {
+  t: 'push'
+  id: string
+  to: string
+  kind: string
+  body?: unknown
+  urgency?: PushUrgency
+  /** Seconds the push service keeps it for a device that is offline (`PUSH_TTL_DEFAULT`, at most `PUSH_TTL_MAX`). */
+  ttl?: number
+}
+
+/**
+ * Bytes of the payload a push may carry: 4096 for the whole encrypted record (RFC 8291), less its header
+ * (86), the padding delimiter (1) and the tag (16).
+ */
+export const MAX_PUSH_PAYLOAD = 3993
+export const PUSH_TTL_DEFAULT = 3600
+export const PUSH_TTL_MAX = 86_400
+const MAX_ENDPOINT_LENGTH = 2048
+
+export type ClientRequest =
+  | SendMessage
+  | InviteRequest
+  | InstancesRequest
+  | RemoveRequest
+  | RenameRequest
+  | PushSubscribeRequest
+  | PushUnsubscribeRequest
+  | PushRequest
 export type ClientMessage = AuthMessage | ClientRequest
 
 // --- Server → client ------------------------------------------------------------------------------
@@ -239,6 +296,9 @@ const REQUEST_ID = /^[\x21-\x7e]{1,128}$/
 const INSTANCE_ID = /^[A-Za-z0-9_-]{1,64}$/
 const KIND = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/
 const BASE64URL = /^[A-Za-z0-9_-]{1,256}$/
+/** 65 and 16 bytes in base64url without padding. */
+const P256DH = /^[A-Za-z0-9_-]{87}$/
+const AUTH_SECRET = /^[A-Za-z0-9_-]{22}$/
 // Bidi overrides would let a device name display as something else in the list of devices.
 const FORBIDDEN_IN_NAME = /[\p{Cc}‪-‮⁦-⁩]/u
 
@@ -303,6 +363,28 @@ export function parseClientMessage(text: string): ParseResult {
       if (data.instance !== undefined) msg.instance = data.instance
       return { ok: true, msg }
     }
+    case 'push-subscribe':
+      if (!isHttpsUrl(data.endpoint)) return fail(`endpoint: expected an https URL of at most ${MAX_ENDPOINT_LENGTH} characters`)
+      if (typeof data.p256dh !== 'string' || !P256DH.test(data.p256dh)) return fail('p256dh: expected 65 bytes, base64url')
+      if (typeof data.auth !== 'string' || !AUTH_SECRET.test(data.auth)) return fail('auth: expected 16 bytes, base64url')
+      return { ok: true, msg: { t: 'push-subscribe', id: re, endpoint: data.endpoint, p256dh: data.p256dh, auth: data.auth } }
+    case 'push-unsubscribe':
+      return { ok: true, msg: { t: 'push-unsubscribe', id: re } }
+    case 'push': {
+      if (!isInstanceId(data.to)) return fail('to: expected an instance')
+      if (typeof data.kind !== 'string' || !KIND.test(data.kind)) return fail('kind: invalid')
+      if (data.urgency !== undefined && data.urgency !== 'normal' && data.urgency !== 'high') {
+        return fail('urgency: expected "normal" or "high"')
+      }
+      if (data.ttl !== undefined && !(Number.isInteger(data.ttl) && (data.ttl as number) >= 0 && (data.ttl as number) <= PUSH_TTL_MAX)) {
+        return fail(`ttl: expected 0 to ${PUSH_TTL_MAX} seconds`)
+      }
+      const msg: PushRequest = { t: 'push', id: re, to: data.to, kind: data.kind }
+      if (data.body !== undefined) msg.body = data.body
+      if (data.urgency !== undefined) msg.urgency = data.urgency
+      if (data.ttl !== undefined) msg.ttl = data.ttl as number
+      return { ok: true, msg }
+    }
     default:
       return fail(`t: unknown type "${data.t.slice(0, 32)}"`)
   }
@@ -328,6 +410,15 @@ export function parseJoinRequest(data: unknown): JoinParseResult {
   return {
     ok: true,
     value: { invite: data.invite, name, role: data.role as Role, signKey: data.signKey, dhKey: data.dhKey },
+  }
+}
+
+function isHttpsUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > MAX_ENDPOINT_LENGTH) return false
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
   }
 }
 

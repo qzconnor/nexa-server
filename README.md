@@ -126,9 +126,12 @@ Stand:
   was gerade läuft. Die Zahl am Tab zählt, was wartet oder abgebrochen ist.
 - Mit der Stufe „Alles, wie am Gerät selbst“ Rückfragen, Freigaben, Pläne und Formulare beantworten, in
   der Inbox und im Chat. Darunter zeigt die Web-App sie nur an.
+- Benachrichtigungen, auch wenn die Web-App zu ist: Einstellungen › Benachrichtigungen. Was kommt, stellt
+  jeder Computer in Nexa unter Einstellungen › Benachrichtigungen › „Aufs Handy schicken“ ein; ein Tipp
+  darauf öffnet den Chat. Auf iPhone und iPad gehen sie nur in der Web-App vom Home-Bildschirm (ab iOS 16.4).
 
-Bilder und Benachrichtigungen (Push) folgen. Die Stufe stellt man am Computer unter Einstellungen › Geräte
-ein; ohne eigenen Eintrag darf die Web-App nur mitlesen.
+Bilder folgen. Die Stufe stellt man am Computer unter Einstellungen › Geräte ein; ohne eigenen Eintrag darf
+die Web-App nur mitlesen.
 
 **Warum sie aus ist**: Für die Web-App ist der Server nicht blind. Sie hält wie jedes Gerät den Schlüssel
 des Namespace, ihren Code lädt der Browser aber bei jedem Start vom Server. Wer den Server übernimmt (oder
@@ -147,7 +150,9 @@ als `"pwa": true`.
 **Push**: Mit der Web-App bietet der Server auch Web Push an. So erreichen Nachrichten der Computer das
 Handy, wenn die Web-App nicht offen ist. Beim ersten Start erzeugt er dafür ein VAPID-Schlüsselpaar und legt
 es in der Datenbank ab. Er schickt nur an die Push-Dienste der Browser (Google, Mozilla, Apple, Microsoft),
-und was er schickt, ist der Chiffretext der Geräte, für den Push-Dienst noch einmal verschlüsselt. Mit
+und was er schickt, ist der Chiffretext der Geräte, für den Push-Dienst noch einmal verschlüsselt. Erst der
+Service Worker der Web-App (`/app/sw.js`) öffnet ihn, mit den Schlüsseln aus IndexedDB, und zeigt ihn an;
+er speichert sonst nichts und beantwortet keine Anfragen, die Seiten kommen immer frisch vom Server. Mit
 `NEXA_VAPID_SUBJECT` trägt man eine Adresse ein, unter der die Push-Dienste den Betreiber erreichen
 (`mailto:` oder `https:`); ohne sie steht dort die Adresse dieses Projekts.
 
@@ -218,7 +223,7 @@ von einer eigenen Stufe des `Dockerfile`.
 npm install
 npm run dev                       # Server auf 127.0.0.1:8080 mit Neustart bei Änderungen, Daten in ./data
 npm run dev:pwa                   # Web-App mit Vite unter http://localhost:5173/app/, API vom Server oben
-npm run build:pwa                 # Web-App nach dist/app, für NEXA_PWA=true npm run dev
+npm run build:pwa                 # Web-App mit Service Worker nach dist/app, für NEXA_PWA=true npm run dev
 npm run sync:app                  # geteilten Code aus ../nexa-app nach pwa/src/shared kopieren
 npm run cli -- namespace create test
 npm run typecheck                 # Server und Web-App
@@ -227,7 +232,8 @@ docker compose up -d --build      # das Image lokal bauen statt aus der Registry
 ```
 
 Die Web-App übernimmt Code der Desktop-App als Kopie, Byte für Byte:
-- in `pwa/src/shared` Themes, Chat-Modell, Remote Control, Umschlag, Mitglieder und Kopplungscode;
+- in `pwa/src/shared` Themes, Chat-Modell, Remote Control, Umschlag, Mitglieder, Kopplungscode und die
+  Benachrichtigung, die ein Computer pusht;
 - in `pwa/src/client` die Verbindung und die Mitgliedschaft;
 - in `pwa/src/lib/tools.ts` die Gruppierung der Chat-Einträge.
 

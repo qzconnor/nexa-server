@@ -14,6 +14,7 @@ import {
   PROTOCOL_VERSION,
   type InstanceInfo,
   type JoinRequest,
+  type PushSubscribeRequest,
   type RelayedMessage,
   type Role,
   type ServerLimits,
@@ -21,7 +22,7 @@ import {
 import { DEFAULT_SERVER_LIMITS } from '@shared/nexa-server/server-messages'
 import type { DeviceIssue } from '@shared/server-link'
 import { TypedEmitter } from './lib/typed-emitter'
-import { ServerConnection, type ConnectionStatus, type SocketFactory, type StopReason } from './server-link/connection'
+import { ServerConnection, ServerError, type ConnectionStatus, type SocketFactory, type StopReason } from './server-link/connection'
 import { DeviceChannel } from './server-link/device-channel'
 import { generateIdentity, LinkStore, type LinkStorage, type StoredLink } from './server-link/link-store'
 import { Membership } from './server-link/membership'
@@ -59,6 +60,9 @@ export interface LinkState {
   /** When the next attempt starts while offline. */
   retryAt: number | null
 }
+
+/** A browser's push subscription as `push-subscribe` takes it (`PushSubscription.toJSON()`, flattened). */
+export type PushSubscriptionKeys = Pick<PushSubscribeRequest, 'endpoint' | 'p256dh' | 'auth'>
 
 export interface PairInput {
   code: string
@@ -269,9 +273,28 @@ export class LinkService extends TypedEmitter<Events> {
     return active.channel.send(to, kind, data)
   }
 
+  /**
+   * Hands the browser's push subscription to the server, which replaces the one before: from now on the
+   * computers' pushes reach this device. Throws `ServerError` (`offline` when not connected).
+   */
+  async subscribePush(subscription: PushSubscriptionKeys): Promise<void> {
+    await this.connected().request({ t: 'push-subscribe', ...subscription })
+  }
+
+  /** The server forgets this device's push subscription. Throws `ServerError` like `subscribePush`. */
+  async unsubscribePush(): Promise<void> {
+    await this.connected().request({ t: 'push-unsubscribe' })
+  }
+
   /** What the server takes, as it said at the last login. */
   limits(): ServerLimits {
     return this.active?.limits ?? DEFAULT_SERVER_LIMITS
+  }
+
+  private connected(): ServerConnection {
+    const connection = this.active?.connection
+    if (!connection || connection.status !== 'online') throw new ServerError('offline', 'not connected')
+    return connection
   }
 
   private activate(link: StoredLink): Active {

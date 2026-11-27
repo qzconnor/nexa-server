@@ -187,6 +187,14 @@ export class DeviceChannel {
     return sent
   }
 
+  /**
+   * `data` sealed for the member `to` alone, as `send` would, but not relayed: for a push, which the
+   * server hands to the push service instead. Null when `to` isn't a member.
+   */
+  sealed(to: string, kind: string, data: unknown): Promise<{ id: string; body: unknown } | null> {
+    return this.sealFor(to, kind, randomMessageId(), data)
+  }
+
   /** The message a piece the server refused belongs to (the piece's own id for a whole message). */
   messageOf(id: string): string {
     return this.partOf.get(id) ?? id

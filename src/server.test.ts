@@ -485,6 +485,7 @@ describe('web app', () => {
     mkdirSync(joinPath(dir, 'assets'))
     writeFileSync(joinPath(dir, 'index.html'), '<!doctype html><title>Nexa</title>')
     writeFileSync(joinPath(dir, 'manifest.webmanifest'), '{"name":"Nexa"}')
+    writeFileSync(joinPath(dir, 'sw.js'), 'self.addEventListener("push", () => {})')
     writeFileSync(joinPath(dir, 'assets', 'index-a1b2c3.js'), SCRIPT)
     app = await startServer({ config: { ...CONFIG, pwa: true }, store, log: silentLogger, pwaDir: dir })
   })
@@ -546,6 +547,15 @@ describe('web app', () => {
     expect(etag).toMatch(/^"[\w-]+"$/)
     const again = await fetch(`${app.url}/app/manifest.webmanifest`, { headers: { 'if-none-match': `W/${etag}` } })
     expect(again.status).toBe(304)
+  })
+
+  it('serves the service worker under its fixed name, never cached for good', async () => {
+    // Its name has no hash: a cached old one would keep the next version out.
+    const worker = await fetch(`${app.url}/app/sw.js`)
+    expect(worker.status).toBe(200)
+    expect(worker.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
+    expect(worker.headers.get('cache-control')).toBe('no-cache')
+    expect(worker.headers.get('content-security-policy')).toContain(`worker-src 'self'`)
   })
 })
 

@@ -15,7 +15,7 @@
     "build:pwa": "vite build --config pwa/vite.config.ts",
     "sync:app": "node scripts/sync-from-app.ts",
     "cli": "node src/main.ts",
-    "typecheck": "tsc --noEmit && vue-tsc --noEmit -p pwa/tsconfig.json",
+    "typecheck": "tsc --noEmit && vue-tsc --noEmit -p pwa/tsconfig.json && tsc --noEmit -p pwa/tsconfig.sw.json",
     "test": "vitest run"
   },
   "dependencies": {

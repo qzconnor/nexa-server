@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { guessDeviceName } from './device-name'
-import { ago, duration, issueText, shortTime } from './format'
+import { ago, duration, issueText, resumeText, shortTime } from './format'
 
 describe('format', () => {
   it('says when a chat was active, short', () => {
@@ -16,6 +16,13 @@ describe('format', () => {
     expect(duration(184_000)).toBe('3 min 4 s')
     expect(duration(120_000)).toBe('2 min')
     expect(duration(72 * 60_000)).toBe('1 h 12 min')
+  })
+
+  it('says when a chat at its limit goes on', () => {
+    const at = new Date(2026, 10, 26, 17, 30).getTime()
+    expect(resumeText({ at, accountId: null, byUser: false })).toBe('Am Limit. Geht um 17:30 weiter.')
+    expect(resumeText({ at, estimated: true, accountId: null, byUser: false })).toBe('Am Limit. Geht etwa um 17:30 weiter.')
+    expect(resumeText({ at: null, accountId: null, byUser: false })).toContain('Kein Konto')
   })
 
   it('says how long ago', () => {

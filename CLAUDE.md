@@ -78,6 +78,9 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
   `pwa/src/client/`: Verbindung zu Server und Computern, teils Kopien aus der App, teils eigen (IndexedDB,
   Koppeln als `controller`). `pwa/src/host-store.ts`: der gezeigte Computer (Chats, Laufzustände, offene
   Chats, Ereignisse), wie `stores/sessions.ts` der App; `pwa/src/components/chat/`: die Zeitleiste eines Chats.
+  `pwa/src/inbox-store.ts`: die Inbox über alle Computer (`sessions:inbox`, neu geholt nach Ereignissen).
+  `pwa/src/watches.ts`: Host-Store und Inbox beobachten Computer gemeinsam über einen `setWatch`.
+  Antworten auf Rückfragen gibt die Seite über `RESPONDER` (`components/chat/respond.ts`) an die Karten.
 - `scripts/sync-from-app.ts`: kopiert den geteilten Code aus der App nach `pwa/src/shared`.
 
 ## Konventionen

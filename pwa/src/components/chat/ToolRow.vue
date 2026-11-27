@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Ban, ChevronRight, LoaderCircle, X } from '@lucide/vue'
 import { computed, ref } from 'vue'
+import { CHANGE_LABEL, changeLines } from '../../lib/diff-lines'
 import { browserStep, nexaToolView, TOOL_META } from '../../lib/tools'
-import type { FileChange, ToolItem } from '../../shared/chat'
+import type { ToolItem } from '../../shared/chat'
 import RenderSpecView from './RenderSpecView.vue'
 
 /** One tool call: what it did in one line, its input and output when opened. */
@@ -34,25 +35,6 @@ const input = computed(() => {
 const openable = computed(
   () => !!(output.value || input.value || props.tool.text || props.tool.changes?.length || props.tool.render || props.tool.app || props.tool.progress),
 )
-
-/** Lines of a change, coloured: its diff (Codex), else the replaced and the new text (Claude's Edit, Write). */
-function changeLines(change: FileChange): { text: string; tone: string }[] {
-  const MAX = 400
-  if (change.diff) {
-    return change.diff
-      .split('\n')
-      .slice(0, MAX)
-      .map((text) => ({
-        text,
-        tone: text.startsWith('+') && !text.startsWith('+++') ? 'text-success' : text.startsWith('-') && !text.startsWith('---') ? 'text-destructive' : '',
-      }))
-  }
-  const removed = change.oldText ? change.oldText.split('\n').map((line) => ({ text: `- ${line}`, tone: 'text-destructive' })) : []
-  const added = change.newText ? change.newText.split('\n').map((line) => ({ text: `+ ${line}`, tone: 'text-success' })) : []
-  return [...removed, ...added].slice(0, MAX)
-}
-
-const CHANGE_LABEL = { add: 'neu', update: 'geändert', delete: 'gelöscht' } as const
 </script>
 
 <template>

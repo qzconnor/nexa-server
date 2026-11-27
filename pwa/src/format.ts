@@ -1,3 +1,4 @@
+import type { SessionResume } from './shared/chat'
 import type { DeviceIssue } from './shared/server-link'
 
 const relative = new Intl.RelativeTimeFormat('de', { numeric: 'auto' })
@@ -43,6 +44,12 @@ export function shortTime(time: number, now = Date.now()): string {
 /** „14:32“. */
 export function clock(time: number): string {
   return clockFormat.format(time)
+}
+
+/** A chat stopped at its account's limit: when it goes on, if ever. */
+export function resumeText(resume: SessionResume): string {
+  if (resume.at === null) return 'Am Limit. Kein Konto, mit dem es weitergehen könnte.'
+  return `Am Limit. Geht ${resume.estimated ? 'etwa ' : ''}um ${clock(resume.at)} weiter.`
 }
 
 /** „8 s“, „3 min 4 s“, „1 h 12 min“: how long a turn took. */

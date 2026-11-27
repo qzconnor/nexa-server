@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ArrowDown, LoaderCircle } from '@lucide/vue'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, toRaw, useTemplateRef, watch } from 'vue'
 import Composer from '../components/chat/Composer.vue'
+import { RESPONDER } from '../components/chat/respond'
 import TimelineBlocks from '../components/chat/TimelineBlocks.vue'
 import UserMessage from '../components/chat/UserMessage.vue'
 import { computerById, computerStatus } from '../computers'
-import { clock, duration } from '../format'
+import { duration, resumeText } from '../format'
 import { host } from '../host'
 import { chatBlocks, type ChatBlock } from '../lib/tools'
+import { linkState } from '../link'
 import { usePageTitle } from '../page-title'
 import { isUnread } from '../shared/chat'
 import { IpcInvoke } from '../shared/ipc'
@@ -21,12 +23,25 @@ const props = defineProps<{ host: string; chat: string }>()
 const device = computed(() => computerById(props.host))
 const status = computed(() => (device.value ? computerStatus(device.value) : null))
 const level = computed(() => status.value?.level ?? null)
+/** Why there is no such computer: this device isn't paired, isn't connected, or it was removed. */
+const missing = computed(() => {
+  if (linkState.value.status === 'unpaired') return 'Dieses Gerät ist nicht gekoppelt.'
+  if (linkState.value.status !== 'online') return 'Keine Verbindung zum Server.'
+  return 'Diesen Computer gibt es im Namespace nicht mehr.'
+})
 const meta = computed(() => host.sessions.value.find((m) => m.id === props.chat))
 const chat = computed(() => host.chats.get(props.chat))
 const runtime = computed(() => host.runtime(props.chat))
 const running = computed(() => runtime.value.status === 'running' || runtime.value.status === 'starting')
 const canPrompt = computed(() => level.value !== null && levelAllows(level.value, 'prompt'))
 usePageTitle(() => meta.value?.title)
+
+provide(RESPONDER, {
+  allowed: () => level.value !== null && levelAllows(level.value, 'full'),
+  respond: async (itemId, response) => {
+    await host.call(IpcInvoke.sessionsRespond, [props.chat, itemId, response])
+  },
+})
 
 // Opened once the computer can be asked; again after it could not (offline, back), which costs nothing
 // when the chat is still loaded.
@@ -189,12 +204,7 @@ const activity = computed(() => {
   if (rt.status === 'waiting') return 'Wartet auf eine Antwort'
   return null
 })
-const resume = computed(() => {
-  const r = runtime.value.resume
-  if (!r) return null
-  if (r.at === null) return 'Am Limit. Kein Konto, mit dem es weitergehen könnte.'
-  return `Am Limit. Geht ${r.estimated ? 'etwa ' : ''}um ${clock(r.at)} weiter.`
-})
+const resume = computed(() => (runtime.value.resume ? resumeText(runtime.value.resume) : null))
 
 const placeholder = computed(() => {
   const provider = meta.value ? PROVIDERS[meta.value.provider]?.name : null
@@ -215,13 +225,19 @@ async function stop(): Promise<void> {
   <div class="relative h-full">
     <div
       ref="scroller"
-      class="pt-header absolute inset-0 overflow-y-auto overscroll-contain"
+      class="pt-header px-safe absolute inset-0 overflow-y-auto overscroll-contain"
       :style="{ paddingBottom: `${dockHeight}px` }"
       @scroll.passive="onScroll"
     >
-      <div ref="content" class="px-safe mx-auto max-w-xl px-3 py-4">
-        <p v-if="!status" class="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-          Diesen Computer gibt es im Namespace nicht mehr.
+      <!-- px-safe on the scroller: on the same element it would replace px-3. -->
+      <div ref="content" class="mx-auto max-w-xl px-3 py-4">
+        <!-- Until logged in the list of devices is empty: not a sign the computer is gone. -->
+        <div v-if="!status && (linkState.status === 'loading' || linkState.status === 'connecting')" class="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+          <LoaderCircle class="size-4 animate-spin" />
+          Verbindet …
+        </div>
+        <p v-else-if="!status" class="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+          {{ missing }}
         </p>
         <p v-else-if="!status.level" class="rounded-lg border border-border bg-card px-3 py-3 text-sm" :class="status.tone">{{ status.text }}</p>
         <div v-else-if="chat?.error" class="space-y-3 rounded-lg border border-border bg-card px-3 py-3 text-sm">

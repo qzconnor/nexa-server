@@ -1,89 +1,250 @@
 <script setup lang="ts">
-import { CircleHelp, ClipboardList, ShieldQuestion } from '@lucide/vue'
-import { computed } from 'vue'
-import type { InteractionItem } from '../../shared/chat'
+import { Check, CircleHelp, ClipboardList, Map as MapIcon, Plug, ShieldQuestion, X } from '@lucide/vue'
+import { computed, inject, ref } from 'vue'
+import { CHANGE_LABEL, changeLines } from '../../lib/diff-lines'
+import type { InteractionItem, InteractionResponse, PermissionMode } from '../../shared/chat'
+import { PERMISSION_MODES } from '../../shared/providers'
+import { REMOTE_LEVEL_LABELS } from '../../shared/remote'
+import AskForm from './AskForm.vue'
+import ElicitationForm from './ElicitationForm.vue'
 import MarkdownText from './MarkdownText.vue'
+import QuestionForm from './QuestionForm.vue'
+import { RESPONDER } from './respond'
 
-/** A question of the agent: what it asks, and what became of it. Answered at the computer for now. */
+/**
+ * A question of the agent, answered right here as in the app: a permission for a tool, questions
+ * with options, a plan to approve, a form of an MCP server or of the agent (`ask_user`). Once answered
+ * it shrinks to what was decided. Without the level `full` it only shows what is asked.
+ */
 const props = defineProps<{ item: InteractionItem }>()
+const responder = inject(RESPONDER, null)
 
-const DECISIONS = { allow: 'Erlaubt', 'allow-session': 'Für die Sitzung erlaubt', deny: 'Abgelehnt' } as const
+const PLAN_MODES: PermissionMode[] = ['edits', 'ask', 'auto', 'full']
 
-const heading = computed(() => {
-  const request = props.item.request
-  switch (request.type) {
-    case 'permission':
-      return { icon: ShieldQuestion, text: `Freigabe: ${request.title}` }
-    case 'question':
-      return { icon: CircleHelp, text: request.questions.length === 1 ? request.questions[0]!.header || 'Frage' : `${request.questions.length} Fragen` }
-    case 'plan':
-      return { icon: ClipboardList, text: 'Plan' }
-    case 'elicitation':
-      return { icon: CircleHelp, text: `Frage von ${request.server}` }
-    case 'form':
-      return { icon: ClipboardList, text: request.title }
+const busy = ref(false)
+const error = ref<string | null>(null)
+const denyText = ref('')
+const showDeny = ref(false)
+const feedback = ref('')
+const planMode = ref<PermissionMode>('edits')
+
+const pending = computed(() => props.item.state === 'pending')
+const request = computed(() => props.item.request)
+const allowed = computed(() => !!responder?.allowed())
+
+async function answer(response: InteractionResponse): Promise<void> {
+  if (!responder || busy.value) return
+  busy.value = true
+  error.value = null
+  try {
+    await responder.respond(props.item.id, response)
+  } catch (e) {
+    error.value = `Antwort ging nicht durch: ${e instanceof Error ? e.message : String(e)}`
+  } finally {
+    busy.value = false
   }
-  return { icon: CircleHelp, text: 'Frage' }
+}
+
+function deny(): void {
+  if (!showDeny.value) {
+    showDeny.value = true
+    return
+  }
+  const message = denyText.value.trim()
+  void answer(message ? { type: 'permission', decision: 'deny', message } : { type: 'permission', decision: 'deny' })
+}
+
+const summary = computed(() => {
+  const r = props.item.response
+  if (props.item.state === 'cancelled') return 'Nicht mehr beantwortet'
+  if (!r) return ''
+  switch (r.type) {
+    case 'permission':
+      return r.decision === 'deny' ? `Abgelehnt${r.message ? `: ${r.message}` : ''}` : r.decision === 'allow-session' ? 'Für diese Session erlaubt' : 'Erlaubt'
+    case 'question':
+      return 'Beantwortet'
+    case 'plan':
+      return r.approve ? `Plan angenommen${r.mode ? ` · ${PERMISSION_MODES[r.mode].label}` : ''}` : 'Plan abgelehnt'
+    case 'elicitation':
+      return r.action === 'accept' ? 'Gesendet' : 'Abgelehnt'
+    case 'form':
+      return r.action === 'submit' ? 'Gesendet' : 'Abgelehnt'
+  }
+  return ''
 })
 
-/** What was answered, in words. */
-const outcome = computed(() => {
-  const { state, response } = props.item
-  if (state === 'cancelled') return 'Abgebrochen'
-  if (state === 'pending' || !response) return null
-  switch (response.type) {
+/** What was filled into a form, field by field. */
+const formAnswers = computed(() => {
+  const r = props.item.response
+  if (request.value.type !== 'form' || r?.type !== 'form' || r.action !== 'submit') return []
+  return request.value.fields.map((field) => {
+    const value = r.values?.[field.key]
+    const text = Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? (value ? 'Ja' : 'Nein') : String(value ?? '')
+    return { key: field.key, label: field.label, text }
+  })
+})
+
+/** The answered questions, each with its answer in full: free answers run long. */
+const answered = computed(() => {
+  const r = props.item.response
+  if (request.value.type !== 'question' || r?.type !== 'question') return []
+  return request.value.questions.map((q) => ({ q, answer: q.secret ? '••••' : (r.answers[q.id] ?? []).join(', ') }))
+})
+
+const icon = computed(() => ({ permission: ShieldQuestion, question: CircleHelp, plan: MapIcon, elicitation: Plug, form: ClipboardList })[request.value.type])
+const heading = computed(() => {
+  const r = request.value
+  switch (r.type) {
     case 'permission':
-      return DECISIONS[response.decision]
+      return r.title
     case 'question':
-      return Object.values(response.answers).flat().join(', ') || 'Beantwortet'
+      return r.questions.length === 1 ? 'Rückfrage' : `${r.questions.length} Rückfragen`
     case 'plan':
-      return response.approve ? 'Plan angenommen' : 'Plan abgelehnt'
+      return 'Plan zur Freigabe'
     case 'elicitation':
-      return response.action === 'accept' ? 'Angenommen' : response.action === 'decline' ? 'Abgelehnt' : 'Abgebrochen'
+      return `Anfrage von ${r.server}`
     case 'form':
-      return response.action === 'submit' ? 'Ausgefüllt' : 'Abgelehnt'
+      return r.title
   }
-  return 'Beantwortet'
+  return ''
 })
 </script>
 
 <template>
-  <div
-    class="rounded-xl border px-3 py-2.5 text-sm"
-    :class="item.state === 'pending' ? 'border-primary/50 bg-primary/10' : 'border-border bg-card'"
-  >
-    <p class="flex items-center gap-2 font-medium">
-      <component :is="heading.icon" class="size-4 shrink-0 text-primary" />
-      <span class="min-w-0 break-words">{{ heading.text }}</span>
-    </p>
-
-    <div class="mt-1.5 space-y-2">
-      <template v-if="item.request.type === 'permission'">
-        <p v-if="item.request.description" class="text-muted-foreground">{{ item.request.description }}</p>
-        <pre v-if="item.request.detail" class="code-block">{{ item.request.detail }}</pre>
-        <p v-if="item.request.reason" class="text-xs text-muted-foreground">{{ item.request.reason }}</p>
-      </template>
-      <template v-else-if="item.request.type === 'question'">
-        <div v-for="question in item.request.questions" :key="question.id">
-          <p>{{ question.question }}</p>
-          <ul v-if="question.options.length" class="mt-1 space-y-0.5 text-muted-foreground">
-            <li v-for="option in question.options" :key="option.label">· {{ option.label }}</li>
-          </ul>
-        </div>
-      </template>
-      <div v-else-if="item.request.type === 'plan'" class="max-h-80 overflow-y-auto">
-        <MarkdownText :text="item.request.plan" />
-      </div>
-      <p v-else-if="item.request.type === 'elicitation'">{{ item.request.message }}</p>
-      <template v-else-if="item.request.type === 'form'">
-        <MarkdownText v-if="item.request.description" :text="item.request.description" />
-        <ul class="space-y-0.5 text-muted-foreground">
-          <li v-for="field in item.request.fields" :key="field.key">· {{ field.label }}</li>
-        </ul>
-      </template>
+  <div class="rounded-xl border text-sm" :class="pending ? 'border-primary/50 bg-card shadow-lg shadow-primary/5' : 'border-border bg-card/40'">
+    <div class="flex items-center gap-2 px-3" :class="pending ? 'pt-3 pb-2' : 'py-2'">
+      <component :is="icon" class="size-4 shrink-0" :class="pending ? 'text-primary' : 'text-muted-foreground'" />
+      <span class="min-w-0 font-medium break-words" :class="{ 'truncate text-muted-foreground': !pending }">{{ heading }}</span>
+      <span v-if="!pending" class="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <Check v-if="item.state === 'answered'" class="size-3.5 shrink-0" />
+        <X v-else class="size-3.5 shrink-0" />
+        <span class="truncate">{{ summary }}</span>
+      </span>
     </div>
 
-    <p v-if="item.state === 'pending'" class="mt-2 text-xs text-primary">Wartet auf eine Antwort. Antworten kannst du am Computer.</p>
-    <p v-else-if="outcome" class="mt-2 text-xs text-muted-foreground">{{ outcome }}</p>
+    <ol v-if="answered.length" class="space-y-2 px-3 pt-0.5 pb-3">
+      <li v-for="{ q, answer: text } in answered" :key="q.id" class="space-y-0.5">
+        <p class="flex items-baseline gap-2 text-xs text-muted-foreground">
+          <span v-if="q.header" class="shrink-0 rounded bg-muted px-1.5 py-px font-medium">{{ q.header }}</span>
+          <span class="line-clamp-2">{{ q.question }}</span>
+        </p>
+        <p class="break-words whitespace-pre-wrap">{{ text || '–' }}</p>
+      </li>
+    </ol>
+
+    <dl v-if="formAnswers.length" class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 px-3 pt-0.5 pb-3 text-xs">
+      <template v-for="entry in formAnswers" :key="entry.key">
+        <dt class="text-muted-foreground">{{ entry.label }}</dt>
+        <dd class="break-words whitespace-pre-wrap">{{ entry.text || '–' }}</dd>
+      </template>
+    </dl>
+
+    <div v-if="pending" class="flex flex-col gap-3 px-3 pb-3">
+      <!-- What is asked; answered here when the computer allows it, else only shown. -->
+      <template v-if="request.type === 'permission'">
+        <p v-if="request.description" class="text-muted-foreground">{{ request.description }}</p>
+        <pre v-if="request.detail && !request.changes?.length" class="code-block max-h-48 whitespace-pre-wrap">{{ request.detail }}</pre>
+        <div v-for="change in request.changes ?? []" :key="change.path" class="space-y-1">
+          <p class="font-mono text-xs break-all">
+            {{ change.movePath ? `${change.path} → ${change.movePath}` : change.path }}
+            <span class="text-muted-foreground">({{ CHANGE_LABEL[change.type] }})</span>
+          </p>
+          <pre v-if="change.diff || change.oldText || change.newText" class="code-block max-h-72"><span v-for="(line, i) in changeLines(change)" :key="i" class="block" :class="line.tone">{{ line.text || ' ' }}</span></pre>
+        </div>
+        <p v-if="request.reason" class="text-xs text-muted-foreground">{{ request.reason }}</p>
+        <template v-if="allowed">
+          <textarea v-if="showDeny" v-model="denyText" class="field min-h-16" placeholder="Was soll der Agent stattdessen tun? (optional)" />
+          <div class="flex flex-wrap items-center gap-2">
+            <template v-for="option in request.options" :key="option.id">
+              <button
+                v-if="option.id !== 'deny'"
+                type="button"
+                class="btn"
+                :class="option.id === 'allow' ? 'btn-primary' : 'btn-outline'"
+                :disabled="busy"
+                @click="answer({ type: 'permission', decision: option.id })"
+              >
+                {{ option.label }}
+              </button>
+            </template>
+            <button type="button" class="btn btn-ghost text-destructive" :disabled="busy" @click="deny">
+              {{ showDeny ? 'Ablehnen' : 'Ablehnen …' }}
+            </button>
+          </div>
+        </template>
+      </template>
+
+      <template v-else-if="request.type === 'question'">
+        <QuestionForm v-if="allowed" :questions="request.questions" :busy="busy" @submit="(answers) => answer({ type: 'question', answers })" />
+        <template v-else>
+          <div v-for="q in request.questions" :key="q.id" class="space-y-1">
+            <p class="flex flex-wrap items-center gap-2">
+              <span v-if="q.header" class="rounded bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary">{{ q.header }}</span>
+              <span>{{ q.question }}</span>
+            </p>
+            <ul v-if="q.options.length" class="space-y-0.5 text-muted-foreground">
+              <li v-for="option in q.options" :key="option.label">· {{ option.label }}</li>
+            </ul>
+          </div>
+        </template>
+      </template>
+
+      <template v-else-if="request.type === 'plan'">
+        <div class="max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-background/40 px-3 py-2.5">
+          <MarkdownText :text="request.plan" />
+        </div>
+        <template v-if="allowed">
+          <textarea v-model="feedback" class="field min-h-14" placeholder="Änderungswünsche am Plan (zum Überarbeiten)" />
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="btn btn-primary" :disabled="busy" @click="answer({ type: 'plan', approve: true, mode: planMode })">
+              Plan annehmen
+            </button>
+            <select v-model="planMode" class="field h-9 w-auto py-0 text-xs" aria-label="Danach arbeiten mit">
+              <option v-for="mode in PLAN_MODES" :key="mode" :value="mode">danach: {{ PERMISSION_MODES[mode].label }}</option>
+            </select>
+            <button
+              type="button"
+              class="btn btn-outline"
+              :disabled="busy"
+              @click="answer({ type: 'plan', approve: false, feedback: feedback.trim() || undefined })"
+            >
+              {{ feedback.trim() ? 'Überarbeiten lassen' : 'Ablehnen' }}
+            </button>
+          </div>
+        </template>
+      </template>
+
+      <template v-else-if="request.type === 'elicitation'">
+        <ElicitationForm
+          v-if="allowed"
+          :request="request"
+          :busy="busy"
+          @answer="(action, content) => answer({ type: 'elicitation', action, content })"
+        />
+        <p v-else class="whitespace-pre-wrap">{{ request.message }}</p>
+      </template>
+
+      <template v-else-if="request.type === 'form'">
+        <AskForm
+          v-if="allowed"
+          :request="request"
+          :busy="busy"
+          @submit="(values) => answer({ type: 'form', action: 'submit', values })"
+          @decline="answer({ type: 'form', action: 'decline' })"
+        />
+        <template v-else>
+          <MarkdownText v-if="request.description" :text="request.description" />
+          <ul class="space-y-0.5 text-muted-foreground">
+            <li v-for="field in request.fields" :key="field.key">· {{ field.label }}</li>
+          </ul>
+        </template>
+      </template>
+
+      <p v-if="error" role="alert" class="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
+      <p v-if="!responder" class="text-xs text-primary">Wartet auf eine Antwort.</p>
+      <p v-else-if="!allowed" class="text-xs text-primary">
+        Wartet auf eine Antwort. Hier antworten erlaubt der Computer mit der Stufe „{{ REMOTE_LEVEL_LABELS.full }}“ (Einstellungen › Geräte).
+      </p>
+    </div>
   </div>
 </template>

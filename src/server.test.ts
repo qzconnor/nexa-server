@@ -568,12 +568,12 @@ describe('push', () => {
   let status: number
 
   /** A phone's subscription, and what its browser does with a push (RFC 8291). */
-  function phone() {
+  function phone(endpoint = ENDPOINT) {
     const ecdh = createECDH('prime256v1')
     ecdh.generateKeys()
     const auth = randomBytes(16)
     return {
-      subscription: { endpoint: ENDPOINT, p256dh: ecdh.getPublicKey().toString('base64url'), auth: auth.toString('base64url') },
+      subscription: { endpoint, p256dh: ecdh.getPublicKey().toString('base64url'), auth: auth.toString('base64url') },
       open(body: Buffer): unknown {
         const salt = body.subarray(0, 16)
         const asPublic = body.subarray(21, 21 + body[20]!)
@@ -629,7 +629,29 @@ describe('push', () => {
     expect(await (await fetch(`${server.url}/v1/info`)).json()).toMatchObject({ vapidKey: info.vapidKey })
     await server.close()
     server = await startServer({ config: CONFIG, store, log: silentLogger })
-    expect(await (await fetch(`${server.url}/v1/info`)).json()).not.toHaveProperty('vapidKey')
+    const without = await (await fetch(`${server.url}/v1/info`)).json()
+    expect(without).not.toHaveProperty('vapidKey')
+    expect(without).not.toHaveProperty('silentPush')
+  })
+
+  it('pushes a silent push, but not to Safari, which would drop the subscription', async () => {
+    expect(await (await fetch(`${server.url}/v1/info`)).json()).toMatchObject({ silentPush: true })
+    const { b, ca, cb } = await subscribed()
+    ca.send({ t: 'push', id: 'q1', to: b.id, kind: 'push.notify', silent: true })
+    expect(await ca.next('ok', (m) => m.re === 'q1')).toEqual({ t: 'ok', re: 'q1' })
+    expect(pushed).toHaveLength(1)
+
+    cb.send({ t: 'push-subscribe', id: 's2', ...phone('https://web.push.apple.com/QGuQyavXutnMH').subscription })
+    await cb.next('ok', (m) => m.re === 's2')
+    ca.send({ t: 'push', id: 'q2', to: b.id, kind: 'push.notify', silent: true })
+    expect(await ca.next('ok', (m) => m.re === 'q2')).toEqual({ t: 'ok', re: 'q2' })
+    expect(pushed).toHaveLength(1)
+    ca.send({ t: 'push', id: 'q3', to: b.id, kind: 'push.notify' })
+    await ca.next('ok', (m) => m.re === 'q3')
+    expect(pushed.map((p) => new URL(p.url).hostname)).toEqual(['fcm.googleapis.com', 'web.push.apple.com'])
+
+    ca.send({ t: 'push', id: 'q4', to: b.id, kind: 'push.notify', silent: false })
+    expect(await ca.next('error', (e) => e.re === 'q4')).toMatchObject({ code: 'bad-request' })
   })
 
   it('pushes exactly the message a send would relay, then stops after unsubscribing', async () => {

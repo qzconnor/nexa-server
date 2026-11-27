@@ -86,7 +86,8 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
   `pwa/src/sw.ts`: der Service Worker (nur Push und Klick, kein Cache, kein `fetch`), vom Plugin in
   `vite.config.ts` als klassisches Skript nach `dist/app/sw.js` gebaut, mit eigenem `tsconfig.sw.json`
   (WebWorker statt DOM). `pwa/src/push/`: Push öffnen und prüfen (`open.ts`, auch im Service Worker),
-  Anmeldung im Browser und beim Server (`subscription.ts`).
+  Anmeldung im Browser und beim Server (`subscription.ts`), überholte Benachrichtigungen wegräumen
+  (`stale.ts`, `tidy.ts`).
 - `scripts/sync-from-app.ts`: kopiert den geteilten Code aus der App nach `pwa/src/shared`.
 
 ## Konventionen

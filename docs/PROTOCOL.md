@@ -18,7 +18,7 @@ Allgemein:
 ### `GET /` und `GET /v1/info`
 
 ```json
-{ "name": "nexa-server", "version": "0.1.0", "protocol": 1, "pwa": true, "vapidKey": "BOr6…" }
+{ "name": "nexa-server", "version": "0.1.0", "protocol": 1, "pwa": true, "vapidKey": "BOr6…", "silentPush": true }
 ```
 
 Damit prüft ein Client, ob unter der Adresse ein nexa-server läuft und ob er dessen Protokoll spricht.
@@ -30,6 +30,10 @@ liefern keine Web-App.
 Browser für `pushManager.subscribe` als `applicationServerKey` braucht. Das Feld gibt es nur, wenn der
 Server Push anbietet, also mit der Web-App; ohne es antwortet `push` immer mit `unsubscribed`. Der Schlüssel
 bleibt über Neustarts gleich.
+
+`silentPush: true` sagt, dass `push` das Feld `silent` kennt (siehe „Push“); es fehlt ohne Push. Ältere
+Server übergehen das Feld und würden auch einen stillen Push an Safari schicken. Wer stille Pushes
+schickt, fragt deshalb vorher hier.
 
 ### `GET /app/`
 
@@ -147,7 +151,7 @@ tragen sie als `re`.
 | `{ t: "rename", id, instance?, name }` | `{ t: "ok", re }`, dazu `instance`/`renamed` an alle |
 | `{ t: "push-subscribe", id, endpoint, p256dh, auth }` | `{ t: "ok", re }` |
 | `{ t: "push-unsubscribe", id }` | `{ t: "ok", re }`, auch ohne Anmeldung |
-| `{ t: "push", id, to, kind, body?, urgency?, ttl? }` | `{ t: "ok", re }`, sobald der Push-Dienst ihn angenommen hat |
+| `{ t: "push", id, to, kind, body?, urgency?, ttl?, silent? }` | `{ t: "ok", re }`, sobald der Push-Dienst ihn angenommen hat |
 
 **`send`** leitet weiter:
 
@@ -202,6 +206,11 @@ Push-Dienst nach RFC 8291 (`aes128gcm`); `body` bleibt der Chiffretext der Gerä
 
 - `urgency`: `normal` (Vorgabe) oder `high`; der Push-Dienst weckt ein schlafendes Gerät eher für `high`.
 - `ttl`: Sekunden, die der Push-Dienst ihn für ein Gerät ohne Netz aufhebt, 0 bis 86400, Vorgabe 3600.
+- `silent: true`: Der Empfänger zeigt dazu womöglich nichts an, etwa weil der Push nur eine
+  Benachrichtigung wegräumt. Browser verlangen zu jedem Push eine Benachrichtigung. Chrome, Edge und
+  Firefox dulden ein paar Ausnahmen (Chrome zeigt danach eine eigene), Safari löscht die Anmeldung einer
+  Seite nach wenigen. Darum schickt der Server einen stillen Push nicht an `*.push.apple.com`, sondern
+  antwortet nur mit `ok`. Ein anderer Wert als `true` ist `bad-request`.
 - Die Nutzlast darf höchstens 3993 Byte haben (4096 je Push, weniger Kopf und Tag der Verschlüsselung),
   sonst `too-large`. Der Server rechnet sie aus, bevor er schickt.
 - Je sendender Instanz gehen 30 Pushes auf einmal, danach einer alle 2 Sekunden; darüber `rate-limited`.

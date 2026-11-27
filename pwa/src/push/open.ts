@@ -10,7 +10,7 @@
 import { openSealed, pairwiseKey, PAIRWISE, parseSealed, verifyOpened } from '@shared/nexa-server/envelope'
 import { REPLAY_WINDOW_MS } from '@shared/nexa-server/members'
 import { PUSH_TTL_MAX } from '@shared/nexa-server/protocol'
-import { parsePushNotice, PUSH_KIND, type PushNotice } from '@shared/push'
+import { parsePush, PUSH_KIND, type PushMessage, type PushNotice, type PushReason } from '@shared/push'
 import type { StoredLink } from '../client/server-link/link-store'
 
 /** As long as the longest `ttl`, and the clocks of computer and phone may differ a little. */
@@ -19,10 +19,10 @@ const MAX_AGE_MS = PUSH_TTL_MAX * 1000 + REPLAY_WINDOW_MS
 /** What the service worker posts to an open window of the app for a click: go to `path`. */
 export const OPEN_MESSAGE = 'nexa:open'
 
-export interface OpenedPush {
+export interface OpenedPush<T extends PushMessage = PushMessage> {
   /** The computer that sent it. */
   from: string
-  notice: PushNotice
+  notice: T
 }
 
 export type PushLink = Pick<StoredLink, 'instance' | 'identity' | 'members' | 'devices'>
@@ -38,7 +38,7 @@ export async function openPush(payload: unknown, link: PushLink, now = Date.now(
   const opened = key && (await openSealed({ from, to, kind, id }, sealed, key))
   if (!opened || !(await verifyOpened(opened, member.signKey))) return null
   if (now - opened.at > MAX_AGE_MS || opened.at - now > REPLAY_WINDOW_MS) return null
-  const notice = parsePushNotice(opened.data)
+  const notice = parsePush(opened.data)
   return notice && { from, notice }
 }
 
@@ -49,17 +49,25 @@ export interface PushNotification {
   tag: string
   /** Where a click leads, relative to the app (`notificationPath` checks it). */
   path: string
+  /** What happened, for taking it away once it is over (`staleNotifications`); none for an unreadable push. */
+  reason?: PushReason
 }
 
-export function pushNotification({ from, notice }: OpenedPush, link: Pick<PushLink, 'devices'>): PushNotification {
+/** The tag of a chat's notification: one per chat of a computer. */
+export function chatTag(from: string, chat: string): string {
+  return `${from}:${chat}`
+}
+
+export function pushNotification({ from, notice }: OpenedPush<PushNotice>, link: Pick<PushLink, 'devices'>): PushNotification {
   // With more than one computer the phone has to say which one it was.
   const computers = link.devices.filter((d) => d.role === 'host')
   const name = computers.length > 1 ? computers.find((d) => d.id === from)?.name : undefined
   return {
     title: notice.title,
     body: name ? `${name} · ${notice.body}` : notice.body,
-    tag: `${from}:${notice.chat}`,
+    tag: chatTag(from, notice.chat),
     path: `chats/${from}/${notice.chat}`,
+    reason: notice.reason,
   }
 }
 

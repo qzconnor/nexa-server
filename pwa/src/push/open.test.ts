@@ -1,6 +1,6 @@
 import type { Member } from '@shared/nexa-server/members'
 import type { InstanceInfo, Role } from '@shared/nexa-server/protocol'
-import { pushNotice, PUSH_KIND } from '@shared/push'
+import { pushNotice, pushResolved, PUSH_KIND } from '@shared/push'
 import { describe, expect, it } from 'vitest'
 import { DeviceChannel } from '../client/server-link/device-channel'
 import { generateIdentity, type Identity } from '../client/server-link/link-store'
@@ -52,6 +52,7 @@ describe('openPush', () => {
   it('opens what a computer sealed for this phone', async () => {
     const { link, push } = await setup()
     expect(await openPush(await push(NOTICE), link, NOW)).toEqual({ from: 'computer', notice: NOTICE })
+    expect(await openPush(await push(pushResolved('chat_1')), link, NOW)).toEqual({ from: 'computer', notice: pushResolved('chat_1') })
   })
 
   it('takes a push that waited at the push service for up to a day, and no older', async () => {
@@ -95,6 +96,7 @@ describe('pushNotification', () => {
       body: 'Mein Chat\nDarf ich die Datei löschen?',
       tag: 'computer:chat_1',
       path: 'chats/computer/chat_1',
+      reason: 'input',
     })
   })
 

@@ -267,7 +267,7 @@ describe('LinkService', () => {
     expect(pushed).toHaveLength(1)
     const opened = await openPush(browser.open(pushed[0]!), storage.link!)
     expect(opened).toEqual({ from: computer.instance, notice })
-    expect(pushNotification(opened!, storage.link!)).toMatchObject({ tag: `${computer.instance}:chat_1`, path: `chats/${computer.instance}/chat_1` })
+    expect(pushNotification({ from: computer.instance, notice }, storage.link!)).toMatchObject({ tag: `${computer.instance}:chat_1`, path: `chats/${computer.instance}/chat_1` })
 
     await link.unsubscribePush()
     const again = { t: 'push', id: sealed.id, to: phone, kind: PUSH_KIND, body: sealed.body } as const

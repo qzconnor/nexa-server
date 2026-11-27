@@ -28,6 +28,15 @@ export function isPushService(endpoint: string): boolean {
   return PUSH_HOSTS.has(host) || PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))
 }
 
+/**
+ * Whether a push the receiver may show nothing for can go to `endpoint`. Not to Apple's push service:
+ * Safari, the web app on an iPhone too, drops the subscription of a page after a few such pushes. Chrome
+ * and Firefox put up with some; beyond them Chrome shows a note of its own.
+ */
+export function allowsSilentPush(endpoint: string): boolean {
+  return !pushHost(endpoint).toLowerCase().endsWith('.push.apple.com')
+}
+
 /** The host of an endpoint, for logs: the endpoint itself is a capability and never logged. */
 export function pushHost(endpoint: string): string {
   try {

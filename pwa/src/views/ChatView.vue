@@ -16,6 +16,7 @@ import { dockShells } from '../lib/shells'
 import { chatBlocks, type ChatBlock } from '../lib/tools'
 import { linkState } from '../link'
 import { usePageTitle } from '../page-title'
+import { closeChatNotifications } from '../push/tidy'
 import { isUnread, type AgentItem } from '../shared/chat'
 import { IpcInvoke } from '../shared/ipc'
 import { PROVIDERS } from '../shared/providers'
@@ -85,6 +86,15 @@ watch(
   },
   (key) => {
     if (key) void host.call(IpcInvoke.sessionsSeen, [props.chat]).catch(() => undefined)
+  },
+  { immediate: true },
+)
+
+// On screen: its notifications have said what they had to.
+watch(
+  () => (pageVisible.value && chat.value?.loaded ? `${props.host}\n${props.chat}` : null),
+  (shown) => {
+    if (shown) void closeChatNotifications(props.host, props.chat)
   },
   { immediate: true },
 )

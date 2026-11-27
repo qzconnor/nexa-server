@@ -79,6 +79,11 @@ export interface ServerInfo {
   pwa: boolean
   /** The server's VAPID public key (P-256, raw, base64url) for `pushManager.subscribe`; missing without push. */
   vapidKey?: string
+  /**
+   * `push` takes `silent`; missing without push. Servers before it ignore the field and would push to
+   * Safari as well, so a sender asks first.
+   */
+  silentPush?: true
 }
 
 /** Body of `POST /v1/join`. */
@@ -179,6 +184,12 @@ export interface PushRequest {
   urgency?: PushUrgency
   /** Seconds the push service keeps it for a device that is offline (`PUSH_TTL_DEFAULT`, at most `PUSH_TTL_MAX`). */
   ttl?: number
+  /**
+   * The receiver may show nothing for it, as for one that takes a notification away. Only pushed where
+   * the push service puts up with that, not to Safari's: it drops the subscription of a page after a few
+   * pushes without a notification. Elsewhere answered with `ok` and not pushed.
+   */
+  silent?: true
 }
 
 /**
@@ -379,10 +390,12 @@ export function parseClientMessage(text: string): ParseResult {
       if (data.ttl !== undefined && !(Number.isInteger(data.ttl) && (data.ttl as number) >= 0 && (data.ttl as number) <= PUSH_TTL_MAX)) {
         return fail(`ttl: expected 0 to ${PUSH_TTL_MAX} seconds`)
       }
+      if (data.silent !== undefined && data.silent !== true) return fail('silent: expected true')
       const msg: PushRequest = { t: 'push', id: re, to: data.to, kind: data.kind }
       if (data.body !== undefined) msg.body = data.body
       if (data.urgency !== undefined) msg.urgency = data.urgency
       if (data.ttl !== undefined) msg.ttl = data.ttl as number
+      if (data.silent === true) msg.silent = true
       return { ok: true, msg }
     }
     default:

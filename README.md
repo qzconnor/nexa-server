@@ -137,6 +137,9 @@ Stand:
 - Benachrichtigungen, auch wenn die Web-App zu ist: Einstellungen › Benachrichtigungen. Was kommt, stellt
   jeder Computer in Nexa unter Einstellungen › Benachrichtigungen › „Aufs Handy schicken“ ein; ein Tipp
   darauf öffnet den Chat. Auf iPhone und iPad gehen sie nur in der Web-App vom Home-Bildschirm (ab iOS 16.4).
+  Ist eine Rückfrage beantwortet, egal wo, verschwindet ihre Benachrichtigung; ebenso, was die offene
+  Web-App nicht mehr betrifft (gelesen, Limit vorbei). Auf iPhone und iPad erst, wenn die Web-App offen ist:
+  Safari erlaubt keine Pushes, die nichts anzeigen.
 
 Bilder folgen. Die Stufe stellt man am Computer unter Einstellungen › Geräte ein; ohne eigenen Eintrag darf
 die Web-App nur mitlesen.

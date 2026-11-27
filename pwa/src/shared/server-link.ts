@@ -100,6 +100,8 @@ export interface PairInput {
 export interface DeviceInvite {
   code: string
   expiresAt: number
+  /** The server's web app with the code (`webAppPairingLink`), for a QR code; only if the server serves it. */
+  webApp?: string
 }
 
 export const ServerLinkInvoke = {

@@ -110,7 +110,8 @@ Sie koppelt sich wie jedes Gerät mit einem Kopplungscode, als Instanz mit der R
 und Themes sind die der Desktop-App.
 
 Gekoppelt wird mit dem Kopplungscode aus „Gerät hinzufügen“, eingefügt oder als Link
-`https://<domain>/app#nexa1:…` (etwa aus einem QR-Code). Den Teil hinter `#` schickt der Browser nie an den
+`https://<domain>/app/#nexa1:…`, den die Desktop-App dort als QR-Code zeigt, sobald der Server die Web-App
+ausliefert. Den Teil hinter `#` schickt der Browser nie an den
 Server, und die Web-App nimmt ihn sofort aus der Adresszeile. Ihre privaten Schlüssel erzeugt sie im Browser
 als nicht exportierbar und legt sie in IndexedDB ab; benutzen kann sie sie, auslesen nicht, auch nicht ihr
 eigener Code.

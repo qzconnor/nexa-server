@@ -3,7 +3,7 @@
  * IndexedDB, and a push sealed as a computer seals one.
  */
 
-import { pushNotice, PUSH_KIND } from '@shared/push'
+import { pushNotice, pushResolved, PUSH_KIND } from '@shared/push'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { DeviceChannel } from './client/server-link/device-channel'
 import { generateIdentity, type Identity, type StoredLink } from './client/server-link/link-store'
@@ -12,6 +12,8 @@ type Listener = (event: Record<string, unknown>) => void
 
 let listeners: Map<string, Listener>
 let shown: { title: string; options: NotificationOptions }[]
+/** The notifications on screen, as `getNotifications` lists them; `closed` once taken away. */
+let onScreen: { tag: string; data: unknown; closed: boolean; close: () => void }[]
 let opened: string[]
 let windows: { url: string; postMessage: (message: unknown) => void; focus: () => Promise<void> }[]
 let stored: StoredLink | null
@@ -34,6 +36,7 @@ beforeEach(async () => {
   }
   listeners = new Map()
   shown = []
+  onScreen = []
   opened = []
   windows = []
   vi.stubGlobal('self', {
@@ -41,7 +44,13 @@ beforeEach(async () => {
     skipWaiting: async () => undefined,
     registration: {
       scope: 'https://nexa.example.com/app/',
-      showNotification: async (title: string, options: NotificationOptions) => void shown.push({ title, options }),
+      showNotification: async (title: string, options: NotificationOptions) => {
+        shown.push({ title, options })
+        onScreen = onScreen.filter((n) => n.tag !== options.tag)
+        const notification = { tag: options.tag!, data: options.data, closed: false, close: () => (notification.closed = true) }
+        onScreen.push(notification)
+      },
+      getNotifications: async ({ tag }: { tag: string }) => onScreen.filter((n) => n.tag === tag && !n.closed),
     },
     clients: { claim: async () => undefined, matchAll: async () => windows, openWindow: async (url: string) => void opened.push(url) },
   })
@@ -111,12 +120,28 @@ it('shows what a computer pushed, one notification per chat', async () => {
       options: {
         body: 'Mein Chat\nDarf ich?',
         tag: 'computer:s1',
-        data: { path: 'chats/computer/s1' },
+        data: { path: 'chats/computer/s1', reason: 'input' },
         icon: 'https://nexa.example.com/app/icon.png',
         lang: 'de',
       },
     },
   ])
+})
+
+it('takes a question’s notification away once it is resolved, showing nothing, and leaves what came since', async () => {
+  await dispatch('push', await push(pushNotice('input', 's1', 'Claude hat eine Frage', 'Mein Chat')))
+  await dispatch('push', await push(pushNotice('input', 's2', 'Claude hat eine Frage', 'Anderer Chat')))
+  await dispatch('push', await push(pushResolved('s1')))
+  expect(shown).toHaveLength(2)
+  expect(onScreen.map((n) => [n.tag, n.closed])).toEqual([
+    ['computer:s1', true],
+    ['computer:s2', false],
+  ])
+
+  // The chat finished since: its notification says so now and stays.
+  await dispatch('push', await push(pushNotice('done', 's2', 'Claude ist fertig', 'Anderer Chat')))
+  await dispatch('push', await push(pushResolved('s2')))
+  expect(onScreen.find((n) => n.tag === 'computer:s2')).toMatchObject({ closed: false, data: { reason: 'done' } })
 })
 
 it('still shows something for a push it cannot read, as browsers want', async () => {

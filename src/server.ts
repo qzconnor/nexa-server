@@ -90,7 +90,10 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   })
 
   const info: ServerInfo = { name: 'nexa-server', version: VERSION, protocol: PROTOCOL_VERSION, pwa: pwa !== null }
-  if (push) info.vapidKey = push.publicKey
+  if (push) {
+    info.vapidKey = push.publicKey
+    info.silentPush = true
+  }
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const path = pathOf(req)

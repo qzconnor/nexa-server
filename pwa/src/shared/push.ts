@@ -49,3 +49,30 @@ export function parsePushNotice(data: unknown): PushNotice | null {
   if (typeof chat !== 'string' || !CHAT_ID.test(chat) || typeof title !== 'string' || typeof body !== 'string') return null
   return pushNotice(reason as PushReason, chat, title, body)
 }
+
+/**
+ * The question a notice of reason `input` asked is answered, or void: the phone takes that notice away
+ * (one of the chat that took its place since stays). The phone shows nothing for it, so it goes as a
+ * silent push (`silent` of nexa-server's `push`), which never reaches Safari. A web app older than this
+ * shows it as a push it can't read; servers that take `silent` serve one that knows it.
+ */
+export interface PushResolved {
+  v: typeof PUSH_VERSION
+  reason: 'resolved'
+  chat: string
+}
+
+export type PushMessage = PushNotice | PushResolved
+
+export function pushResolved(chat: string): PushResolved {
+  return { v: PUSH_VERSION, reason: 'resolved', chat }
+}
+
+/** A notice or a resolve of this version; null for anything else. */
+export function parsePush(data: unknown): PushMessage | null {
+  if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    const { v, reason, chat } = data as Record<string, unknown>
+    if (reason === 'resolved') return v === PUSH_VERSION && typeof chat === 'string' && CHAT_ID.test(chat) ? pushResolved(chat) : null
+  }
+  return parsePushNotice(data)
+}

@@ -369,6 +369,11 @@
   .btn-ghost {
     @apply hover:bg-foreground/5 active:bg-foreground/10;
   }
+  /* The end of something folded fades out, rather than a line cut in half. */
+  .fade-end {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
+  }
   /* Output of a tool, a diff, a command: in the code's colours, scrolling sideways; the glass shows faintly through. */
   .code-block {
     max-height: 22rem;

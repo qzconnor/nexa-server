@@ -1,14 +1,15 @@
 /**
  * The web app's service worker, at /app/sw.js with the scope /app/ (built by the plugin in
- * vite.config.ts as a classic script). It only shows the computers' pushes and opens the app on a
- * click; it caches nothing and answers no requests, so the page always comes fresh from the server.
+ * vite.config.ts as a classic script). It only shows the computers' pushes (and takes a question's
+ * away once it is answered) and opens the app on a click; it caches nothing and answers no requests,
+ * so the page always comes fresh from the server.
  *
  * It reads the pairing from IndexedDB, as the page stores it: the keys to open a push never leave this
  * browser, and the server only ever sees ciphertext (docs/PROTOCOL.md, „Push“).
  */
 
 import { LinkStore } from './client/server-link/link-store'
-import { notificationPath, OPEN_MESSAGE, openPush, pushNotification, UNREADABLE_PUSH, type PushNotification } from './push/open'
+import { chatTag, notificationPath, OPEN_MESSAGE, openPush, pushNotification, UNREADABLE_PUSH, type PushNotification } from './push/open'
 
 // The WebWorker lib types `self` as a plain worker; this one is a service worker.
 const sw = self as unknown as ServiceWorkerGlobalScope
@@ -30,7 +31,11 @@ async function showPush(data: PushMessageData | null): Promise<void> {
   try {
     const link = await store.load()
     const opened = link && data ? await openPush(data.json(), link) : null
-    if (opened) shown = pushNotification(opened, link!)
+    if (opened) {
+      const { from, notice } = opened
+      if (notice.reason === 'resolved') return await takeAway(from, notice.chat)
+      shown = pushNotification({ from, notice }, link!)
+    }
     // Ids only, never what it says.
     else console.debug('[nexa] push: not readable')
   } catch (error) {
@@ -39,10 +44,22 @@ async function showPush(data: PushMessageData | null): Promise<void> {
   await sw.registration.showNotification(shown.title, {
     body: shown.body,
     tag: shown.tag,
-    data: { path: shown.path },
+    // Why, for taking it away once that is over (push/stale.ts, takeAway).
+    data: shown.reason ? { path: shown.path, reason: shown.reason } : { path: shown.path },
     icon: new URL('icon.png', sw.registration.scope).href,
     lang: 'de',
   })
+}
+
+/**
+ * A question of a chat is answered or void: its notification goes, not one of the chat that came since
+ * in its place. Shows nothing; the server sends such a push (`silent`) only where the browser puts up
+ * with that, not to Safari.
+ */
+async function takeAway(from: string, chat: string): Promise<void> {
+  for (const notification of await sw.registration.getNotifications({ tag: chatTag(from, chat) })) {
+    if ((notification.data as { reason?: unknown } | null)?.reason === 'input') notification.close()
+  }
 }
 
 /** Into a window of the app that is open already, else a new one; `path` is relative to the app. */

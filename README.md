@@ -121,9 +121,11 @@ Stand:
 - Koppeln und Abmelden. Die Computer des Namespace stehen mit dem, was sie dem Handy erlauben.
 - Die Chats eines Computers: Liste mit Suche, darin was gerade läuft, wartet oder ungelesen ist.
 - Einen Chat lesen, live: Antworten, Werkzeuge, Agents, Rückfragen, ältere Nachrichten beim Hochscrollen.
-  Gedanken, Befehle und Änderungen an Dateien stehen offen im Verlauf (Änderungen eingeklappt, wenn der
-  Computer es unter Einstellungen › Chat so will), Lesen, Suchen und andere Werkzeuge auf Tipp. Änderungen
-  wie in der Desktop-App: mit Zeilennummern und dem Code in den Farben seiner Sprache.
+  Was von selbst aufgeklappt ist, stellt jedes Gerät unter Einstellungen › Chatverlauf ein: Gedanken,
+  Änderungen an Dateien und Fehler stehen zunächst offen, Befehle eingeklappt (Änderungen auch, wenn der
+  Computer es unter Einstellungen › Chat so will); Lesen, Suchen und andere Werkzeuge auf Tipp. Änderungen
+  wie in der Desktop-App: mit Zeilennummern und dem Code in den Farben seiner Sprache. Eigene Nachrichten in
+  Markdown, lange eingeklappt mit „Mehr anzeigen“.
 - Ab der Stufe „Prompts senden“ eigene Prompts schicken und abbrechen.
 - Unter der Eingabe die offenen Pull Requests des Repositorys, in dem der Chat arbeitet, wie in der
   Desktop-App: der des Branches mit Nummer und Stand, ein Tipp zeigt alle und öffnet einen auf GitHub. Der
@@ -135,6 +137,9 @@ Stand:
 - Benachrichtigungen, auch wenn die Web-App zu ist: Einstellungen › Benachrichtigungen. Was kommt, stellt
   jeder Computer in Nexa unter Einstellungen › Benachrichtigungen › „Aufs Handy schicken“ ein; ein Tipp
   darauf öffnet den Chat. Auf iPhone und iPad gehen sie nur in der Web-App vom Home-Bildschirm (ab iOS 16.4).
+  Ist eine Rückfrage beantwortet, egal wo, verschwindet ihre Benachrichtigung; ebenso, was die offene
+  Web-App nicht mehr betrifft (gelesen, Limit vorbei). Auf iPhone und iPad erst, wenn die Web-App offen ist:
+  Safari erlaubt keine Pushes, die nichts anzeigen.
 
 Bilder folgen. Die Stufe stellt man am Computer unter Einstellungen › Geräte ein; ohne eigenen Eintrag darf
 die Web-App nur mitlesen.

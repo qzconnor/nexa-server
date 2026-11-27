@@ -27,7 +27,7 @@ import {
   type ServerMessage,
 } from './protocol.ts'
 import type { InstanceRecord, Store } from './store.ts'
-import { isPushService, pushHost, type PushOutcome, type PushSender } from './web-push.ts'
+import { allowsSilentPush, isPushService, pushHost, type PushOutcome, type PushSender } from './web-push.ts'
 
 /** Pushes an instance may send at once, and how fast that refills: a burst of finished chats, not a flood. */
 const PUSH_BURST = 30
@@ -382,6 +382,11 @@ export class Relay {
     const subscription = this.#push && this.#store.getPushSubscription(target.id)
     if (!this.#push || !subscription) {
       this.#error(ws, msg.id, 'unsubscribed', 'the instance has no push subscription')
+      return
+    }
+    if (msg.silent && !allowsSilentPush(subscription.endpoint)) {
+      this.#log.debug(`Stiller Push von Instanz ${connection.instance} an ${target.id} übersprungen: ${pushHost(subscription.endpoint)} duldet keine`)
+      this.#send(ws, { t: 'ok', re: msg.id })
       return
     }
     // The very message a `send` would relay, so the receiver opens it with the same code.

@@ -2,6 +2,7 @@
 import { ExternalLink } from '@lucide/vue'
 import { computed, reactive } from 'vue'
 import type { InteractionRequest } from '../../shared/chat'
+import ToggleSwitch from '../ToggleSwitch.vue'
 
 type Elicitation = Extract<InteractionRequest, { type: 'elicitation' }>
 interface Field {
@@ -63,7 +64,7 @@ function openPage(): void {
       <div v-for="field in fields" :key="field.key" class="flex flex-col gap-1">
         <label v-if="field.type === 'boolean'" class="flex items-center justify-between gap-3 py-1">
           <span class="font-medium">{{ field.title }}<span v-if="field.required" class="text-destructive"> *</span></span>
-          <input v-model="values[field.key]" type="checkbox" class="size-5 accent-(--primary)" />
+          <ToggleSwitch :model-value="!!values[field.key]" @update:model-value="(on) => (values[field.key] = on)" />
         </label>
         <label v-else :for="`elicit-${field.key}`" class="font-medium">
           {{ field.title }}<span v-if="field.required" class="text-destructive"> *</span>

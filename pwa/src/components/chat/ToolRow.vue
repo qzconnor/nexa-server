@@ -48,8 +48,9 @@ const openable = computed(
       @click="open = !open"
     >
       <component :is="meta.icon" class="size-4 shrink-0" :class="meta.color" />
-      <span class="shrink-0 font-medium">{{ title }}</span>
-      <span v-if="detail" class="min-w-0 truncate font-mono text-xs text-muted-foreground">{{ detail }}</span>
+      <!-- Both may shrink, the detail first: a long title (an agent's description of a command) stays on the screen. -->
+      <span class="min-w-0 truncate font-medium">{{ title }}</span>
+      <span v-if="detail" class="min-w-0 shrink-[3] truncate font-mono text-xs text-muted-foreground">{{ detail }}</span>
       <span class="ml-auto flex shrink-0 items-center gap-1">
         <LoaderCircle v-if="busy" class="size-3.5 animate-spin text-muted-foreground" aria-label="Läuft" />
         <X v-else-if="tool.status === 'error'" class="size-3.5 text-destructive" aria-label="Fehler" />

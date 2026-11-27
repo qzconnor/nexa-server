@@ -1,20 +1,25 @@
 <script setup lang="ts">
 import { ArrowDown, LoaderCircle } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, toRaw, useTemplateRef, watch } from 'vue'
+import { chatAccount, chatLimits } from '../chat-limits'
+import AgentDock from '../components/chat/AgentDock.vue'
 import Composer from '../components/chat/Composer.vue'
 import { RESPONDER } from '../components/chat/respond'
+import ShellDock from '../components/chat/ShellDock.vue'
 import TimelineBlocks from '../components/chat/TimelineBlocks.vue'
 import UserMessage from '../components/chat/UserMessage.vue'
 import { computerById, computerStatus } from '../computers'
 import { duration, resumeText } from '../format'
 import { host } from '../host'
+import { dockShells } from '../lib/shells'
 import { chatBlocks, type ChatBlock } from '../lib/tools'
 import { linkState } from '../link'
 import { usePageTitle } from '../page-title'
-import { isUnread } from '../shared/chat'
+import { isUnread, type AgentItem } from '../shared/chat'
 import { IpcInvoke } from '../shared/ipc'
 import { PROVIDERS } from '../shared/providers'
 import { levelAllows } from '../shared/remote'
+import type { SessionUpdateInput } from '../shared/types'
 import { pageVisible } from '../visibility'
 
 /** One chat of a computer: its timeline, live, and below it the composer (from level `prompt`). */
@@ -34,7 +39,16 @@ const chat = computed(() => host.chats.get(props.chat))
 const runtime = computed(() => host.runtime(props.chat))
 const running = computed(() => runtime.value.status === 'running' || runtime.value.status === 'starting')
 const canPrompt = computed(() => level.value !== null && levelAllows(level.value, 'prompt'))
-usePageTitle(() => meta.value?.title)
+usePageTitle(() => (meta.value ? { text: meta.value.title, limits: chatLimits(meta.value) } : null))
+
+// The plan limits for the header, once the computer can be asked and the chat's CLI is known.
+watch(
+  () => [level.value !== null, host.instance.value, meta.value?.provider] as const,
+  ([usable, at, provider]) => {
+    if (usable && at && provider) void host.loadLimits(provider)
+  },
+  { immediate: true },
+)
 
 provide(RESPONDER, {
   allowed: () => level.value !== null && levelAllows(level.value, 'full'),
@@ -76,13 +90,41 @@ watch(
 
 // --- The timeline ----------------------------------------------------------------------------------
 
+/** The subagent whose work the timeline shows instead of the main thread (from the agents over the composer). */
+const agentId = ref<string | null>(null)
+/** The composer's „+“ menu is open: agents and shells step aside for it. */
+const menuOpen = ref(false)
+watch(
+  () => props.chat,
+  () => {
+    agentId.value = null
+    menuOpen.value = false
+  },
+)
+
 /** Built anew when an item comes, goes or is replaced, not for every piece of streamed text (`textShown`). */
 const blocks = computed<ChatBlock[]>(() => {
   const c = chat.value
   if (!c?.loaded) return []
   void c.textShown
-  return chatBlocks(c.items, null, true, (item) => !!toRaw(item).text.trim())
+  return chatBlocks(c.items, agentId.value, true, (item) => !!toRaw(item).text.trim())
 })
+
+/**
+ * Over the composer while a subagent runs, as in the app: those of the last prompt (the finished ones
+ * stay until the last is through) and background ones still at work; the one shown stays as well, so
+ * the way back to the main thread does.
+ */
+const dockAgents = computed(() => {
+  const items = chat.value?.loaded ? chat.value.items : []
+  const lastPrompt = items.findLastIndex((i) => i.kind === 'user' && !i.parentId)
+  const list = items.filter((i, index): i is AgentItem => i.kind === 'agent' && !i.parentId && (index > lastPrompt || i.status === 'running'))
+  if (list.some((a) => a.status === 'running')) return list
+  const open = agentId.value ? items.find((i): i is AgentItem => i.kind === 'agent' && i.id === agentId.value) : undefined
+  return open ? [open] : []
+})
+/** The shells running in the background (and those since the last prompt while one does). */
+const dockShellList = computed(() => (chat.value?.loaded ? dockShells(chat.value.items) : []))
 
 /** The newest blocks only, older ones as the user scrolls up: long answers take long to lay out on a phone. */
 const PAGE = 30
@@ -96,9 +138,9 @@ const first = computed(() => {
 const shown = computed(() => (first.value ? blocks.value.slice(first.value) : blocks.value))
 const more = computed(() => first.value > 0 || (chat.value?.older ?? 0) > 0)
 watch(
-  () => [props.chat, blocks.value.length] as const,
-  ([id], before) => {
-    if (id !== before?.[0]) anchor.value = null
+  () => [props.chat, blocks.value.length, agentId.value] as const,
+  ([id, , agent], before) => {
+    if (id !== before?.[0] || agent !== before?.[2]) anchor.value = null
     if (anchor.value === null && blocks.value.length) anchor.value = keyOf(blocks.value[first.value]!)
   },
   { immediate: true },
@@ -183,8 +225,9 @@ function jumpToEnd(): void {
 
 const now = ref(Date.now())
 let ticker: ReturnType<typeof setInterval> | null = null
+// The clock runs while something does: the turn, or a shell in the background after it.
 watch(
-  running,
+  () => running.value || dockShellList.value.some((s) => s.shell?.status === 'running'),
   (on) => {
     if (on && !ticker) ticker = setInterval(() => (now.value = Date.now()), 1000)
     if (!on && ticker) {
@@ -211,9 +254,25 @@ const placeholder = computed(() => {
   return running.value ? 'Nachricht, während der Agent arbeitet …' : provider ? `Nachricht an ${provider} …` : 'Nachricht …'
 })
 
-async function send(text: string): Promise<void> {
-  await host.call(IpcInvoke.sessionsSend, [props.chat, { text }])
+const canFull = computed(() => level.value !== null && levelAllows(level.value, 'full'))
+/** The chat's folder on the computer: the commands of its CLI are those of the folder. */
+const cwd = computed(() => host.projects.value.find((p) => p.id === meta.value?.projectId)?.path)
+
+async function send(text: string, images: string[]): Promise<void> {
+  await host.call(IpcInvoke.sessionsSend, [props.chat, images.length ? { text, images } : { text }])
   jumpToEnd()
+}
+
+/** A picture for the prompt goes first; the computer keeps it with its own attachments and names the file. */
+async function attach(data: string, mime: string): Promise<string> {
+  const path = await host.call(IpcInvoke.appSaveImage, [data, mime])
+  if (typeof path !== 'string') throw new Error('Der Computer hat das Bild nicht angenommen.')
+  return path
+}
+
+/** Model, effort, account, permissions: the computer sends the chat's new settings back with its list. */
+async function update(patch: SessionUpdateInput): Promise<void> {
+  await host.call(IpcInvoke.sessionsUpdate, [props.chat, patch])
 }
 
 async function stop(): Promise<void> {
@@ -226,7 +285,7 @@ async function stop(): Promise<void> {
     <div
       ref="scroller"
       class="pt-header px-safe absolute inset-0 overflow-y-auto overscroll-contain"
-      :style="{ paddingBottom: `${dockHeight}px` }"
+      :style="{ paddingBottom: `${dockHeight + 12}px` }"
       @scroll.passive="onScroll"
     >
       <!-- px-safe on the scroller: on the same element it would replace px-3. -->
@@ -289,17 +348,49 @@ async function stop(): Promise<void> {
       <ArrowDown class="size-4" />
     </button>
 
-    <div ref="dock" class="glass pb-safe px-safe absolute inset-x-0 bottom-0 z-10 border-t border-border">
-      <div class="mx-auto max-w-xl px-3 py-2">
+    <!-- The composer floats like the dock of the other pages, as wide as it; its gap below counts as its height. -->
+    <div ref="dock" class="pb-dock px-safe pointer-events-none absolute inset-x-0 bottom-0 z-10">
+      <div class="pointer-events-auto mx-4 space-y-2 sm:mx-auto sm:max-w-[34rem]">
+        <!--
+          Agents and shells at work rest on the composer, as in the app. The „+“ menu opens over them and
+          they step aside meanwhile, glass over glass would blur into one; their room stays, the chat
+          doesn't jump.
+        -->
+        <div
+          v-if="dockAgents.length || dockShellList.length"
+          class="space-y-2 transition-opacity duration-200"
+          :class="menuOpen && 'pointer-events-none opacity-0'"
+          :inert="menuOpen"
+        >
+          <AgentDock v-if="dockAgents.length" v-model:shown="agentId" :agents="dockAgents" :now="now" />
+          <ShellDock v-if="dockShellList.length" :shells="dockShellList" :session-id="props.chat" :now="now" :full="canFull" />
+        </div>
         <Composer
-          v-if="canPrompt && chat?.loaded"
+          v-if="canPrompt && chat?.loaded && meta"
+          v-model:menu="menuOpen"
           :draft-key="`${props.host}:${props.chat}`"
           :placeholder="placeholder"
           :running="running"
+          :session-id="props.chat"
+          :provider="meta.provider"
+          :account="chatAccount(meta)"
+          :model="meta.model"
+          :effort="meta.effort"
+          :mode="meta.permissionMode"
+          :ultracode="meta.ultracode"
+          :context="runtime.context"
+          :compacting="!!runtime.compactingSince"
+          :cwd="cwd"
+          :full="canFull"
           :send="send"
           :stop="stop"
+          :attach="attach"
+          :update="update"
         />
-        <p v-else-if="status?.level === 'read'" class="py-1 text-center text-xs text-muted-foreground">
+        <p
+          v-else-if="status?.level === 'read'"
+          class="glass bar-round pane-edge border border-foreground/10 px-4 py-3 text-center text-xs text-muted-foreground"
+        >
           Nur mitlesen. Prompts zu senden erlaubt der Computer unter Einstellungen › Geräte.
         </p>
       </div>

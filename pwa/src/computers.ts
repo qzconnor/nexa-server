@@ -1,7 +1,8 @@
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { LinkDevice } from './client/link-service'
 import { ago, issueText } from './format'
 import { hosts, linkState } from './link'
+import type { PageTitle } from './page-title'
 import { REMOTE_LEVEL_LABELS, type RemoteLevel } from './shared/remote'
 
 /** The computers of the namespace (devices that have chats), not this device. */
@@ -10,6 +11,38 @@ export const computers = computed(() => linkState.value.devices.filter((device) 
 export function computerById(id: string): LinkDevice | undefined {
   return computers.value.find((device) => device.id === id)
 }
+
+const STORAGE_KEY = 'nexa.computer'
+const chosen = ref<string | null>(readChosen())
+
+function readChosen(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY)
+  } catch {
+    // Private mode may refuse storage; the choice then lasts until the page closes.
+    return null
+  }
+}
+
+/** The computer whose chats the chats tab shows, from now on and next time; a choice per device. */
+export function chooseComputer(id: string): void {
+  chosen.value = id
+  try {
+    localStorage.setItem(STORAGE_KEY, id)
+  } catch {
+    // See readChosen.
+  }
+}
+
+/**
+ * The computer the chats tab shows: the only one, the one chosen last, else the first that can be used.
+ * None while several are there and none of them can be used yet: the tab lists them, each with why.
+ */
+export const shownComputer = computed(() => {
+  const list = computers.value
+  if (list.length === 1) return list[0]!
+  return list.find((device) => device.id === chosen.value) ?? list.find((device) => computerStatus(device).level) ?? null
+})
 
 export interface ComputerStatus {
   /** One line: why it can't be used yet, or what it lets this device do. */
@@ -38,4 +71,17 @@ export function computerStatus(device: LinkDevice): ComputerStatus {
   }
   if (answer?.error) return status(answer.error, 'text-destructive')
   return status('Frage nach, was es erlaubt …', 'text-muted-foreground', true)
+}
+
+/** Online and a member green, online but not yet confirmed amber, offline grey. */
+export function computerDot(device: LinkDevice): string {
+  return device.online && device.trusted ? 'bg-success' : device.online ? 'bg-warning' : 'bg-muted-foreground/40'
+}
+
+/** A computer as the header shows it on the right of its pages: its name and its dot, a menu of the others if there are. */
+export function computerTitle(device: LinkDevice): PageTitle {
+  const status = computerStatus(device)
+  return {
+    computer: { name: device.name, dot: computerDot(device), busy: status.asking, hint: status.text, switchable: computers.value.length > 1 },
+  }
 }

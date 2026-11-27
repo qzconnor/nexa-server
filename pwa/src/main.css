@@ -41,6 +41,10 @@
   --color-surface-strong: var(--surface-strong);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  /* How full a plan limit is (lib/usage.ts), as in the app. */
+  --color-usage-low: var(--success);
+  --color-usage-medium: color-mix(in oklch, var(--warning), var(--destructive) 40%);
+  --color-usage-high: var(--destructive);
   --color-code: var(--code-bg);
   --color-code-foreground: var(--code-fg);
   --radius-sm: calc(var(--radius) * 0.6);
@@ -83,6 +87,12 @@
   --window-bg: color-mix(in oklab, #1c1917 72%, transparent);
   --code-bg: color-mix(in oklab, #1c1917 82%, transparent);
   --code-fg: #e7e1dc;
+  --syn-red: #ef6b5b;
+  --syn-green: #9fcf7a;
+  --syn-yellow: #e8b85c;
+  --syn-blue: #7fa8e8;
+  --syn-magenta: #d58fd0;
+  --syn-cyan: #6fc7c0;
   /* The app's default (Einstellungen › Darstellung). */
   --radius: 0.625rem;
   /* Heights of the bars over the page, without the safe areas of the phone. */
@@ -97,6 +107,12 @@
   --tool-search: oklch(0.56 0.14 235);
   --tool-write: oklch(0.63 0.17 50);
   --tool-run: oklch(0.56 0.15 150);
+}
+/* The mark of each CLI (ProviderIcon), as in the app: the vendors' brand hues. */
+:root {
+  --provider-claude: #d97757;
+  --provider-codex: #10a37f;
+  --provider-antigravity: #6e64f0;
 }
 .dark {
   --tool-read: oklch(0.74 0.15 300);
@@ -152,19 +168,47 @@
     -webkit-backdrop-filter: blur(6px) saturate(160%);
     backdrop-filter: blur(6px) saturate(160%);
   }
-  /* Room for the bars, which float over the page so it scrolls beneath their glass. */
-  .pt-header {
-    padding-top: calc(var(--header-height) + env(safe-area-inset-top));
+  /* The header floats like the dock: its gap to the top, or below the notch if that is lower. */
+  .top-dock {
+    top: max(env(safe-area-inset-top), 1rem);
   }
-  /* What floats above the page, the dock: a faint light on its upper edge, as on a pane, and a shadow. */
+  /* Room for the header and its gap; the pages' own padding (p-4) keeps them as far below as from the sides. */
+  .pt-header {
+    padding-top: calc(var(--header-height) + max(env(safe-area-inset-top), 1rem));
+  }
+  /*
+   * The rounding of the bars (header, dock, composer). Chromium lets the blur behind rounded glass spill
+   * past a corner as a square, which shows where the light behind is bright (bottom left, red): the clip
+   * keeps it to the rounding. It cuts a shadow off too, so that goes on a wrapper (.floating).
+   */
+  .bar-round {
+    border-radius: 1.375rem;
+    clip-path: inset(0 round 1.375rem);
+  }
+  /* The same for the smaller panes of glass resting on the composer (agents, shells). */
+  .card-round {
+    border-radius: 1rem;
+    clip-path: inset(0 round 1rem);
+  }
+  /* A faint light on the upper edge, as on a pane of glass. */
+  .pane-edge {
+    box-shadow: inset 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent);
+  }
+  /*
+   * The shadow beneath what floats low over the page, the dock and the composer, on a wrapper of the
+   * pane. Not the header: up there a shadow falls on the brightest of the light and stains it.
+   */
   .floating {
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent),
-      0 10px 30px -10px rgb(0 0 0 / 0.45);
+    border-radius: 1.375rem;
+    box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.45);
   }
   /* The tab bar floats as a dock: its gap to the bottom, or the home indicator if that is higher. */
   .bottom-dock {
     bottom: max(env(safe-area-inset-bottom), 1rem);
+  }
+  /* The composer's gap to the bottom, as the dock's, but as padding: the page measures it with the composer. */
+  .pb-dock {
+    padding-bottom: max(env(safe-area-inset-bottom), 1rem);
   }
   /* The dock, its gap below and a little air above, so the last of a page scrolls clear of it. */
   .pb-tabbar {
@@ -302,37 +346,95 @@
       visibility: hidden;
     }
   }
-  /* Fields and buttons of the answer forms: several forms, one look. */
+  /*
+   * Fields and buttons of the answer forms: several forms, one look, in the glass of the panes. Buttons are
+   * pills as tall as a finger needs; a field is rounded as the rows of the menus.
+   */
   .field {
-    @apply w-full rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30;
+    @apply w-full rounded-[0.875rem] border border-foreground/15 bg-foreground/[0.05] px-3.5 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring/60 focus:ring-2 focus:ring-ring/25;
   }
   textarea.field {
     @apply resize-y;
   }
   .btn {
-    @apply inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3.5 text-sm font-medium transition-opacity disabled:opacity-50;
+    @apply inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-medium transition-[opacity,background-color] disabled:opacity-50;
   }
   .btn-primary {
-    @apply bg-primary text-primary-foreground;
+    @apply bg-primary text-primary-foreground hover:opacity-90 active:opacity-80;
   }
   .btn-outline {
-    @apply border border-input bg-card hover:bg-accent;
+    @apply border border-foreground/15 bg-foreground/[0.05] hover:bg-foreground/10 active:bg-foreground/15;
   }
   .btn-ghost {
-    @apply hover:bg-accent;
+    @apply hover:bg-foreground/5 active:bg-foreground/10;
   }
-  /* Output of a tool, a diff, a command: in the code's colours, scrolling sideways. */
+  /* Output of a tool, a diff, a command: in the code's colours, scrolling sideways; the glass shows faintly through. */
   .code-block {
     max-height: 22rem;
     overflow: auto;
     padding: 0.6em 0.8em;
-    border-radius: var(--radius);
-    background: var(--code-bg);
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, var(--code-bg) 80%, transparent);
     color: var(--code-fg);
-    border: 1px solid var(--border);
+    border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
     font-family: var(--font-mono);
     font-size: 0.75rem;
     line-height: 1.5;
     white-space: pre;
+  }
+
+  /* The floating panes (FloatingPane.vue): rows as the app's menu items, only taller for a finger. */
+  .menu-row {
+    @apply flex h-11 w-full min-w-0 shrink-0 items-center gap-3 rounded-[0.875rem] px-2.5 text-left text-[0.95rem] transition-colors hover:bg-foreground/5 active:bg-foreground/10;
+  }
+  .menu-icon {
+    @apply size-4 shrink-0 text-muted-foreground;
+  }
+  .menu-separator {
+    @apply mx-2 my-1 h-px shrink-0 bg-foreground/10;
+  }
+  .menu-note {
+    @apply flex items-center justify-center gap-2 px-3 py-6 text-center text-[0.85rem] text-muted-foreground;
+  }
+  /* The look of a switch in a row that is the switch (role="switch"); a switch of its own is ToggleSwitch.vue. */
+  .menu-switch {
+    @apply relative h-5 w-9 shrink-0 rounded-full transition-colors;
+  }
+  .menu-switch > span {
+    @apply absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform;
+  }
+
+  /* The highest effort, as the CLI shows it: a rainbow that runs (text with .effort-rainbow-text), as in the app. */
+  .effort-rainbow {
+    background: linear-gradient(
+        90deg,
+        var(--syn-red),
+        var(--syn-yellow),
+        var(--syn-green),
+        var(--syn-cyan),
+        var(--syn-blue),
+        var(--syn-magenta),
+        var(--syn-red)
+      )
+      0 0 / 200% 100%;
+    animation: effort-rainbow 3s linear infinite;
+  }
+  .effort-rainbow-text {
+    background-clip: text;
+    color: transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .effort-rainbow {
+      animation: none;
+    }
+  }
+}
+
+@keyframes effort-rainbow {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 200% 0;
   }
 }

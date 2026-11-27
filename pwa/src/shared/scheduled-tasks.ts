@@ -1,5 +1,6 @@
 import { PROVIDER_IDS, type PermissionMode, type ProviderId } from './chat'
 import { PROVIDERS } from './providers'
+import type { ProviderUsage, UsageWindow } from './types'
 import { isPlainObject } from './utils'
 
 /**
@@ -45,14 +46,53 @@ export interface TaskRun {
   /** What started it: its schedule, the user („Jetzt ausführen“), or Nexa's start after it was missed. */
   trigger: 'schedule' | 'manual' | 'catch-up'
   /**
-   * `started`: the chat got the prompt. `skipped`: the chat of the last run still worked. `missed`: it
-   * was due while Nexa was off or the computer slept, and the task doesn't catch up. `error`: it
-   * couldn't start (`error` says why).
+   * `started`: the chat got the prompt. `skipped`: the chat of the last run still worked, or the
+   * account's usage didn't fit the task's limits (`error` says why). `missed`: it was due while Nexa was
+   * off or the computer slept, and the task doesn't catch up. `error`: it couldn't start (`error` says why).
    */
   outcome: 'started' | 'skipped' | 'missed' | 'error'
   sessionId?: string
   error?: string
+  /** How long the run waited for the account's usage to fit its limits (ms). */
+  waited?: number
 }
+
+/** The kinds of limit windows a task can hold to: the short one (5 hours) and the long ones (week). */
+export const USAGE_WINDOW_KINDS = ['session', 'week'] as const
+export type UsageWindowKind = (typeof USAGE_WINDOW_KINDS)[number]
+
+export const USAGE_WINDOW_LABELS: Record<UsageWindowKind, string> = { session: '5 Stunden', week: 'Woche' }
+
+/** A range of usage in percent, both ends included. */
+export interface UsageRange {
+  min: number
+  max: number
+}
+
+/**
+ * Runs only while the usage of the task's account lies in a range („Limits“): below a threshold so
+ * other work keeps its share, or above a point to use up what is left before a reset.
+ */
+export interface TaskUsageGuard {
+  /** Per kind of window, the range its usage must lie in; missing: any. The fullest window of a kind counts. */
+  ranges: Partial<Record<UsageWindowKind, UsageRange>>
+  /** When it doesn't fit: the run is left out, or waits until it fits (until the next run at most). */
+  otherwise: 'skip' | 'wait'
+  /** Nexa has no numbers for the account (none read yet, a login without them): runs anyway instead of holding back. */
+  runWithoutNumbers: boolean
+}
+
+/** A run that waits for the account's usage to fit the task's limits. */
+export interface TaskWait {
+  /** When it was due. */
+  since: number
+  trigger: 'schedule' | 'catch-up'
+  /** Why it waits, as the last check said. */
+  reason: string
+}
+
+/** How long a run waits at most for a task without a next run (once): every window resets within a week. */
+export const MAX_WAIT_MS = 7 * 24 * 60 * 60_000
 
 /** What the user sets of a task. */
 export interface ScheduledTaskInput {
@@ -74,6 +114,8 @@ export interface ScheduledTaskInput {
   reuseChat: boolean
   /** A run missed while Nexa was off or the computer slept comes once when it is back. */
   catchUp: boolean
+  /** Runs only while the account's usage fits; missing: whatever it is. „Jetzt ausführen“ ignores it. */
+  usageGuard?: TaskUsageGuard
 }
 
 export interface ScheduledTask extends ScheduledTaskInput {
@@ -84,6 +126,8 @@ export interface ScheduledTask extends ScheduledTaskInput {
   nextRunAt: number | null
   /** The newest first, at most `MAX_TASK_RUNS`. */
   runs: TaskRun[]
+  /** A run due that waits for the account's usage to fit (`usageGuard.otherwise` `wait`). */
+  waiting?: TaskWait
 }
 
 export const ScheduledInvoke = {
@@ -92,6 +136,7 @@ export const ScheduledInvoke = {
   remove: 'scheduled:remove',
   setEnabled: 'scheduled:set-enabled',
   runNow: 'scheduled:run-now',
+  stopWaiting: 'scheduled:stop-waiting',
 } as const
 
 export const ScheduledEvent = {
@@ -105,8 +150,10 @@ export interface ScheduledApi {
   save(input: ScheduledTaskInput, id?: string): Promise<ScheduledTask>
   remove(id: string): Promise<void>
   setEnabled(id: string, enabled: boolean): Promise<ScheduledTask>
-  /** Runs it now, whatever its schedule (also when switched off); what came of it. */
+  /** Runs it now, whatever its schedule (also when switched off) and its limits; what came of it. */
   runNow(id: string): Promise<TaskRun>
+  /** A run that waits for its limits doesn't come (it counts as skipped). */
+  stopWaiting(id: string): Promise<ScheduledTask>
   onChanged(cb: (tasks: ScheduledTask[]) => void): Unsubscribe
 }
 
@@ -241,6 +288,87 @@ export function describeSchedule(schedule: TaskSchedule): string {
   }
 }
 
+// Limits --------------------------------------------------------------------------------------------
+
+/** Which kind of limit a window is: shorter than a day the 5 hours, else the week (also a model's week). */
+export function windowKind(window: Pick<UsageWindow, 'key' | 'windowMinutes'>): UsageWindowKind {
+  if (window.windowMinutes) return window.windowMinutes < 1440 ? 'session' : 'week'
+  return window.key === 'five_hour' ? 'session' : 'week'
+}
+
+/**
+ * The fullest window of each kind in whole percent, as the title bar shows it. A window whose reset
+ * passed is empty again, whatever the last reading said (as `account-choice.ts` counts it).
+ */
+export function usageByKind(usage: Pick<ProviderUsage, 'windows'>, now: number): Partial<Record<UsageWindowKind, number>> {
+  const used: Partial<Record<UsageWindowKind, number>> = {}
+  for (const window of usage.windows) {
+    const percent = window.resetsAt && window.resetsAt <= now ? 0 : Math.max(0, Math.min(100, Math.round(window.usedPercent)))
+    const kind = windowKind(window)
+    used[kind] = Math.max(used[kind] ?? 0, percent)
+  }
+  return used
+}
+
+/** What the limits say of a run now; `fits` null: Nexa has no numbers for the account. */
+export type UsageCheck = { fits: true } | { fits: false | null; reason: string }
+
+/** Whether the account's usage fits the task's limits, and if not, why in words for the list of runs. */
+export function checkUsage(guard: TaskUsageGuard, usage: Pick<ProviderUsage, 'windows'> | undefined, now: number): UsageCheck {
+  if (!usage?.windows.length) return { fits: null, reason: 'Nexa kennt die Limits des Accounts noch nicht' }
+  const used = usageByKind(usage, now)
+  const reasons: string[] = []
+  for (const kind of USAGE_WINDOW_KINDS) {
+    const range = guard.ranges[kind]
+    const percent = used[kind]
+    // A limit the account doesn't have holds nothing back.
+    if (!range || percent === undefined) continue
+    if (percent > range.max) reasons.push(`${USAGE_WINDOW_LABELS[kind]} bei ${percent} % (läuft bis ${range.max} %)`)
+    else if (percent < range.min) reasons.push(`${USAGE_WINDOW_LABELS[kind]} bei ${percent} % (läuft ab ${range.min} %)`)
+  }
+  return reasons.length ? { fits: false, reason: reasons.join(', ') } : { fits: true }
+}
+
+/** A range in words: „bis 80 %“, „ab 50 %“, „20–90 %“. */
+export function describeRange(range: UsageRange): string {
+  if (range.min === range.max) return `bei ${range.min} %`
+  if (range.min === 0) return `bis ${range.max} %`
+  if (range.max === 100) return `ab ${range.min} %`
+  return `${range.min}–${range.max} %`
+}
+
+/** The limits in words, for the list: „5 Stunden bis 80 %, Woche ab 50 %“. */
+export function describeUsageGuard(guard: TaskUsageGuard): string {
+  return USAGE_WINDOW_KINDS.flatMap((kind) => {
+    const range = guard.ranges[kind]
+    return range ? [`${USAGE_WINDOW_LABELS[kind]} ${describeRange(range)}`] : []
+  }).join(', ')
+}
+
+/** Until when a waiting run waits at most: the task's next run, else (once, switched off) a week. */
+export function waitUntil(task: Pick<ScheduledTask, 'nextRunAt'>, wait: TaskWait): number {
+  return task.nextRunAt ?? wait.since + MAX_WAIT_MS
+}
+
+/** The limits from the window, checked; none when no range holds anything back. Throws in words. */
+export function parseUsageGuard(value: unknown): TaskUsageGuard | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!isPlainObject(value)) throw new Error('Die Limits fehlen.')
+  const raw = isPlainObject(value.ranges) ? value.ranges : {}
+  const ranges: TaskUsageGuard['ranges'] = {}
+  for (const kind of USAGE_WINDOW_KINDS) {
+    const range = raw[kind]
+    if (range === undefined || range === null) continue
+    const min = isPlainObject(range) ? Number(range.min) : NaN
+    const max = isPlainObject(range) ? Number(range.max) : NaN
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max > 100) throw new Error('Limits liegen zwischen 0 und 100 %.')
+    if (min > max) throw new Error(`${USAGE_WINDOW_LABELS[kind]}: Der untere Wert liegt über dem oberen.`)
+    if (min > 0 || max < 100) ranges[kind] = { min, max }
+  }
+  if (!Object.keys(ranges).length) return undefined
+  return { ranges, otherwise: value.otherwise === 'wait' ? 'wait' : 'skip', runWithoutNumbers: value.runWithoutNumbers === true }
+}
+
 // Checks --------------------------------------------------------------------------------------------
 
 /** The schedule from the window, checked; throws in words for the dialog. */
@@ -301,6 +429,7 @@ export function parseTaskInput(value: unknown): ScheduledTaskInput {
   if (typeof value.projectId !== 'string' || !value.projectId) throw new Error('Wähle das Projekt, in dem die Aufgabe arbeitet.')
   const text = (v: unknown) => (typeof v === 'string' ? v.trim().slice(0, 200) : '')
   const account = text(value.account)
+  const usageGuard = parseUsageGuard(value.usageGuard)
   return {
     name,
     prompt,
@@ -314,6 +443,7 @@ export function parseTaskInput(value: unknown): ScheduledTaskInput {
     projectId: value.projectId,
     reuseChat: value.reuseChat === true,
     catchUp: value.catchUp !== false,
+    ...(usageGuard ? { usageGuard } : {}),
   }
 }
 

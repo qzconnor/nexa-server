@@ -50,6 +50,8 @@ const EXTRA: Record<string, string> = {
   'src/renderer/src/lib/format.ts': 'lib/format.ts',
   // The names and colours of the thinking efforts, for the composer's settings.
   'src/renderer/src/lib/effort.ts': 'lib/effort.ts',
+  // How an open pull request stands (tone and word), for the chip under the composer.
+  'src/renderer/src/lib/pull-requests.ts': 'lib/pull-requests.ts',
   'src/main/server-link/connection.ts': 'client/server-link/connection.ts',
   'src/main/server-link/device-channel.ts': 'client/server-link/device-channel.ts',
   'src/main/server-link/membership.ts': 'client/server-link/membership.ts',

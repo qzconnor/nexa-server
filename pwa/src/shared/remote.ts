@@ -165,7 +165,7 @@ const CHANNELS: Record<string, ChannelRule> = {
   [IpcInvoke.sessionsSync]: 'prompt',
   // Looking at a chat: whoever may read it may have read it.
   [IpcInvoke.sessionsSeen]: 'read',
-  // The phone's inbox (shared/inbox.ts); no window of the app asks for it.
+  // The inbox (shared/inbox.ts): the phone's, and the app's of another device's chats.
   [IpcInvoke.sessionsInbox]: 'read',
   [IpcInvoke.sessionsCompact]: 'prompt',
   [IpcInvoke.sessionsFork]: 'prompt',
@@ -199,6 +199,8 @@ const CHANNELS: Record<string, ChannelRule> = {
   [FilesInvoke.gitWatch]: 'read',
   [FilesInvoke.gitWebUrl]: 'read',
   [FilesInvoke.gitMainWorktree]: 'read',
+  // The open pull requests of a chat's repository, read with this device's GitHub CLI.
+  [FilesInvoke.gitPullRequests]: 'read',
   // Changes the files: new, renamed and trashed entries, what git stages and discards.
   [FilesInvoke.create]: 'full',
   [FilesInvoke.rename]: 'full',

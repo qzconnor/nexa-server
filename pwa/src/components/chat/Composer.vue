@@ -20,14 +20,17 @@ function newPicture(blob: Blob): Picture {
 </script>
 
 <script setup lang="ts">
-import { ArrowUp, ChevronUp, LoaderCircle, Plus, Square, X } from '@lucide/vue'
+import { ArrowUp, ChevronUp, GitPullRequest, GitPullRequestDraft, LoaderCircle, Plus, Square, X } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { host } from '../../host'
 import { effortLabel, effortTone } from '../../lib/effort'
+import { pullRequestState, pullRequestToneClass } from '../../lib/pull-requests'
+import { usePullRequests } from '../../pull-requests'
 import type { ContextUsage, PermissionMode, ProviderId } from '../../shared/chat'
 import { IpcInvoke } from '../../shared/ipc'
 import { PERMISSION_MODES, PROVIDERS } from '../../shared/providers'
 import type { ModelDefaults, SessionUpdateInput } from '../../shared/types'
+import { pageVisible } from '../../visibility'
 import ProviderIcon from '../ProviderIcon.vue'
 import UsageRing from '../UsageRing.vue'
 import AddMenu from './AddMenu.vue'
@@ -35,11 +38,13 @@ import FloatingPane from '../FloatingPane.vue'
 import ComposerSettings from './ComposerSettings.vue'
 import ContextCard from './ContextCard.vue'
 import { base64Of, preparePicture } from './picture'
+import PullRequestsCard from './PullRequestsCard.vue'
 
 /**
  * Writes a prompt for the chat, as the app's composer: the text above, below it the „+“ (photos,
  * commands, connectors and plugins, AddMenu.vue), the chat's CLI and model with what differs from the
- * usual (a tap: its settings, ComposerSettings.vue), the context ring (a tap: what fills it), and the send
+ * usual (a tap: its settings, ComposerSettings.vue), the open pull requests of its repository (a tap: the
+ * list, PullRequestsCard.vue), the context ring (a tap: what fills it), and the send
  * button, which stops the turn while the agent works and nothing is written. The menus come up over the
  * composer, one at a time (FloatingPane.vue). Enter sends where there is a keyboard (Shift+Enter: a new
  * line); on a phone Enter is a new line and the button sends, as in its messengers.
@@ -61,6 +66,7 @@ const props = defineProps<{
   context?: ContextUsage
   /** The CLI compacts the context right now: its ring turns meanwhile. */
   compacting?: boolean
+  /** The folder the chat's agent works in on the computer. */
   cwd?: string
   /** The computer allows everything: the switches and the settings act. */
   full: boolean
@@ -211,7 +217,7 @@ function onPaste(event: ClipboardEvent): void {
 
 // --- The menus over the composer and the chat's settings ------------------------------------------------
 
-type Pane = 'add' | 'settings' | 'context'
+type Pane = 'add' | 'settings' | 'pulls' | 'context'
 const pane = ref<Pane | null>(null)
 watch(pane, (value) => (menuOpen.value = value !== null))
 watch(menuOpen, (value) => {
@@ -223,8 +229,31 @@ function paneModel(which: Pane) {
 }
 const addOpen = paneModel('add')
 const settingsOpen = paneModel('settings')
+const pullsOpen = paneModel('pulls')
 const contextOpen = paneModel('context')
 const settingsPane = useTemplateRef<InstanceType<typeof ComposerSettings>>('settingsPane')
+
+// --- The open pull requests of the chat's repository ----------------------------------------------------
+
+const pulls = usePullRequests({ dir: () => props.cwd, call: (ch, args) => host.call(ch, args), visible: pageVisible })
+// The agent may have opened one in its turn: the computer reads anew instead of its last minute's answer.
+watch(
+  () => props.running,
+  (now, before) => {
+    if (before && !now) void pulls.refresh(true)
+  },
+)
+const pullOwn = computed(() => pulls.own.value)
+const pullOwnTone = computed(() => (pullOwn.value ? pullRequestToneClass[pullRequestState(pullOwn.value).tone] : ''))
+const pullOthers = computed(() => pulls.pullRequests.value.length - (pullOwn.value ? 1 : 0))
+const pullsLabel = computed(() => {
+  const count = pulls.pullRequests.value.length
+  const all = count === 1 ? '1 offener Pull Request' : `${count} offene Pull Requests`
+  const own = pullOwn.value
+  if (!own) return `${all} im Repository`
+  const rest = pullOthers.value ? `, dazu ${pullOthers.value === 1 ? '1 weiterer' : `${pullOthers.value} weitere`} offen` : ''
+  return `Pull Request #${own.number} dieses Branches: ${pullRequestState(own).label}${rest}`
+})
 
 const defaults = ref<ModelDefaults | null>(null)
 /** Asked once the composer is used, as in the app: Claude Code answers from a short start of its own. */
@@ -312,7 +341,8 @@ function insertCommand(insert: string): void {
           @paste="onPaste"
           @focus="warm = true"
         />
-        <div class="flex min-w-0 items-center gap-1 px-2 pb-2">
+        <!-- A container: what fits beside the buttons depends on the composer's width, not the window's. -->
+        <div class="@container flex min-w-0 items-center gap-1 px-2 pb-2">
           <button
             type="button"
             class="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
@@ -342,6 +372,32 @@ function insertCommand(insert: string): void {
               <span v-for="chip in chips" :key="chip.label" class="max-w-full truncate" :class="chip.class">{{ chip.label }}</span>
             </span>
             <ChevronUp class="size-3.5 shrink-0 opacity-60 transition-transform" :class="{ 'rotate-180': settingsOpen }" />
+          </button>
+          <!--
+            The open pull requests, as in the app: the branch's by its number, coloured by how it stands, else
+            how many are open. Narrow, only the icon and the number stay.
+          -->
+          <button
+            v-if="pulls.pullRequests.value.length"
+            type="button"
+            class="flex h-9 shrink-0 items-center gap-1 rounded-full px-2 text-sm text-muted-foreground transition-colors hover:bg-foreground/5"
+            :class="{ 'bg-foreground/10': pullsOpen }"
+            :aria-label="pullsLabel"
+            :title="pullsLabel"
+            aria-haspopup="dialog"
+            :aria-expanded="pullsOpen"
+            @click="pullsOpen = true"
+          >
+            <template v-if="pullOwn">
+              <component :is="pullOwn.draft ? GitPullRequestDraft : GitPullRequest" class="size-4 shrink-0" :class="pullOwnTone" />
+              <span class="text-foreground tabular-nums">#{{ pullOwn.number }}</span>
+              <span v-if="pullOthers" class="hidden text-xs tabular-nums @xs:inline">+{{ pullOthers }}</span>
+            </template>
+            <template v-else>
+              <GitPullRequest class="size-4 shrink-0" />
+              <span class="text-foreground tabular-nums">{{ pulls.pullRequests.value.length }}</span>
+              <span class="hidden @sm:inline">offen</span>
+            </template>
           </button>
           <div class="ml-auto flex shrink-0 items-center gap-1.5">
             <button
@@ -409,6 +465,16 @@ function insertCommand(insert: string): void {
         :defaults="defaults"
         :full="full"
         :update="update"
+      />
+    </FloatingPane>
+    <FloatingPane v-if="pulls.pullRequests.value.length" v-model:open="pullsOpen" label="Offene Pull Requests">
+      <PullRequestsCard
+        :pull-requests="pulls.pullRequests.value"
+        :branch="pulls.branch.value"
+        :web-url="pulls.webUrl.value"
+        :loading="pulls.loading.value"
+        @refresh="pulls.refresh(true)"
+        @done="pullsOpen = false"
       />
     </FloatingPane>
     <FloatingPane v-if="context?.window" v-model:open="contextOpen" label="Kontext">

@@ -121,6 +121,8 @@ Stand:
 - Koppeln und Abmelden. Die Computer des Namespace stehen mit dem, was sie dem Handy erlauben.
 - Die Chats eines Computers: Liste mit Suche, darin was gerade läuft, wartet oder ungelesen ist.
 - Einen Chat lesen, live: Antworten, Werkzeuge, Agents, Rückfragen, ältere Nachrichten beim Hochscrollen.
+  Gedanken, Befehle und Änderungen an Dateien stehen offen im Verlauf (Änderungen eingeklappt, wenn der
+  Computer es unter Einstellungen › Chat so will), Lesen, Suchen und andere Werkzeuge auf Tipp.
 - Ab der Stufe „Prompts senden“ eigene Prompts schicken und abbrechen.
 - Unter der Eingabe die offenen Pull Requests des Repositorys, in dem der Chat arbeitet, wie in der
   Desktop-App: der des Branches mit Nummer und Stand, ein Tipp zeigt alle und öffnet einen auf GitHub. Der

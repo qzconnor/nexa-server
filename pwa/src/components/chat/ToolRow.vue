@@ -1,22 +1,31 @@
 <script setup lang="ts">
 import { Ban, ChevronRight, LoaderCircle, X } from '@lucide/vue'
 import { computed, ref } from 'vue'
+import { host } from '../../host'
 import { CHANGE_LABEL, changeLines } from '../../lib/diff-lines'
 import { browserStep, nexaToolView, TOOL_META } from '../../lib/tools'
 import type { ToolItem } from '../../shared/chat'
 import RenderSpecView from './RenderSpecView.vue'
+import { opensByItself } from './unfold'
 
-/** One tool call: what it did in one line, its input and output when opened. */
+/**
+ * One tool call: what it did in one line, its input and output when opened. Commands, changes and
+ * failures come opened (unfold.ts), the rest when tapped.
+ */
 const props = defineProps<{ tool: ToolItem; browser?: boolean }>()
 
 /** Longer output shows its end only: the page of a phone isn't a terminal. */
 const OUTPUT_SHOWN = 6000
 
-const open = ref(false)
+/** What a tap chose; null: as the call is (a diff or a failure that comes later opens it). */
+const toggled = ref<boolean | null>(null)
+const open = computed(() => toggled.value ?? opensByItself(props.tool, host.limits.settings?.chat?.collapseDiffs === true))
 const meta = computed(() => TOOL_META[props.tool.tool] ?? TOOL_META.other)
 const view = computed(() => (props.browser ? browserStep(props.tool) : nexaToolView(props.tool)))
 const title = computed(() => view.value?.title ?? props.tool.title)
 const detail = computed(() => view.value?.detail ?? props.tool.detail)
+/** A command in full: its line above cuts it off. */
+const command = computed(() => (props.tool.tool === 'bash' && !props.browser ? detail.value?.trim() || null : null))
 const busy = computed(() => props.tool.status === 'running' || props.tool.status === 'pending')
 
 const output = computed(() => {
@@ -33,7 +42,8 @@ const input = computed(() => {
   return json.length > OUTPUT_SHOWN ? `${json.slice(0, OUTPUT_SHOWN)}\n… (gekürzt)` : json
 })
 const openable = computed(
-  () => !!(output.value || input.value || props.tool.text || props.tool.changes?.length || props.tool.render || props.tool.app || props.tool.progress),
+  () =>
+    !!(output.value || input.value || command.value || props.tool.text || props.tool.changes?.length || props.tool.render || props.tool.app || props.tool.progress),
 )
 </script>
 
@@ -45,7 +55,7 @@ const openable = computed(
       :class="openable ? 'hover:bg-accent' : 'cursor-default'"
       :aria-expanded="openable ? open : undefined"
       :disabled="!openable"
-      @click="open = !open"
+      @click="toggled = !open"
     >
       <component :is="meta.icon" class="size-4 shrink-0" :class="meta.color" />
       <!-- Both may shrink, the detail first: a long title (an agent's description of a command) stays on the screen. -->
@@ -58,8 +68,9 @@ const openable = computed(
         <ChevronRight v-if="openable" class="size-3.5 text-muted-foreground transition-transform" :class="{ 'rotate-90': open }" />
       </span>
     </button>
-    <div v-if="open" class="mt-1 mb-2 ml-7 space-y-2 text-sm">
+    <div v-if="open && openable" class="mt-1 mb-2 ml-7 space-y-2 text-sm">
       <p v-if="tool.progress && busy" class="text-xs text-muted-foreground">{{ tool.progress }}</p>
+      <pre v-if="command" class="code-block whitespace-pre-wrap break-all"><span class="text-(--syn-comment) select-none">$ </span>{{ command }}</pre>
       <p v-if="tool.text" class="break-words whitespace-pre-wrap">{{ tool.text }}</p>
       <p v-if="tool.app" class="text-xs text-muted-foreground">Die Seite dieses Werkzeugs zeigt nur der Computer.</p>
       <RenderSpecView v-if="tool.render" :spec="tool.render" />

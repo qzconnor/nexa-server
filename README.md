@@ -96,7 +96,8 @@ In `.env` neben `docker-compose.yml`; Compose reicht sie an die Container weiter
 | `NEXA_MAX_INSTANCES` | `20` | Instanzen je Namespace |
 | `NEXA_RATE_LIMIT` | `100` | Nachrichten je Sekunde und Verbindung, kurzzeitig doppelt so viele |
 | `NEXA_LOG_LEVEL` | `info` | `debug`, `info`, `warn` oder `error` |
-| `NEXA_PWA` | `false` | `true` liefert die Web-App unter `/app/` aus, siehe [Web-App](#web-app) |
+| `NEXA_PWA` | `false` | `true` liefert die Web-App unter `/app/` aus und bietet Push an, siehe [Web-App](#web-app) |
+| `NEXA_VAPID_SUBJECT` | Adresse dieses Projekts | Kontakt für die Push-Dienste: `mailto:name@domain` oder eine `https:`-Adresse |
 
 Adresse, Port und Datenordner im Container (`NEXA_HOST=0.0.0.0`, `NEXA_PORT=8080`, `NEXA_DATA_DIR=/data`)
 legt das Image fest.
@@ -142,6 +143,13 @@ schützt vor fremden Seiten und eingeschleusten Skripten, nicht vor dem Server s
 
 Das Image enthält die Web-App immer; `NEXA_PWA` schaltet nur die Auslieferung. `GET /v1/info` meldet sie
 als `"pwa": true`.
+
+**Push**: Mit der Web-App bietet der Server auch Web Push an. So erreichen Nachrichten der Computer das
+Handy, wenn die Web-App nicht offen ist. Beim ersten Start erzeugt er dafür ein VAPID-Schlüsselpaar und legt
+es in der Datenbank ab. Er schickt nur an die Push-Dienste der Browser (Google, Mozilla, Apple, Microsoft),
+und was er schickt, ist der Chiffretext der Geräte, für den Push-Dienst noch einmal verschlüsselt. Mit
+`NEXA_VAPID_SUBJECT` trägt man eine Adresse ein, unter der die Push-Dienste den Betreiber erreichen
+(`mailto:` oder `https:`); ohne sie steht dort die Adresse dieses Projekts.
 
 ## Admin-CLI
 

@@ -18,13 +18,18 @@ Allgemein:
 ### `GET /` und `GET /v1/info`
 
 ```json
-{ "name": "nexa-server", "version": "0.1.0", "protocol": 1, "pwa": false }
+{ "name": "nexa-server", "version": "0.1.0", "protocol": 1, "pwa": true, "vapidKey": "BOr6…" }
 ```
 
 Damit prüft ein Client, ob unter der Adresse ein nexa-server läuft und ob er dessen Protokoll spricht.
 `pwa` sagt, ob der Server die Web-App unter `/app/` ausliefert (`NEXA_PWA`). Nur dann führt ein Link
-`https://<server>/app#nexa1:…` (etwa als QR-Code zum Koppeln) irgendwohin. Ältere Server ohne das Feld
+`https://<server>/app/#nexa1:…` (etwa als QR-Code zum Koppeln) irgendwohin. Ältere Server ohne das Feld
 liefern keine Web-App.
+
+`vapidKey` ist der öffentliche VAPID-Schlüssel des Servers (P-256, roh, 65 Byte, base64url), den der
+Browser für `pushManager.subscribe` als `applicationServerKey` braucht. Das Feld gibt es nur, wenn der
+Server Push anbietet, also mit der Web-App; ohne es antwortet `push` immer mit `unsubscribed`. Der Schlüssel
+bleibt über Neustarts gleich.
 
 ### `GET /app/`
 
@@ -140,6 +145,9 @@ tragen sie als `re`.
 | `{ t: "instances", id }` | `{ t: "instances", re, instances: [InstanceInfo, …] }` |
 | `{ t: "remove", id, instance }` | `{ t: "ok", re }`, dazu `removed` an alle |
 | `{ t: "rename", id, instance?, name }` | `{ t: "ok", re }`, dazu `instance`/`renamed` an alle |
+| `{ t: "push-subscribe", id, endpoint, p256dh, auth }` | `{ t: "ok", re }` |
+| `{ t: "push-unsubscribe", id }` | `{ t: "ok", re }`, auch ohne Anmeldung |
+| `{ t: "push", id, to, kind, body?, urgency?, ttl? }` | `{ t: "ok", re }`, sobald der Push-Dienst ihn angenommen hat |
 
 **`send`** leitet weiter:
 
@@ -163,6 +171,52 @@ Remote Control braucht beide Seiten online. Bei `*` gibt es keine Fehler für ei
 Instanz wird mit 4403 getrennt.
 
 **`rename`** ohne `instance` benennt die eigene Instanz um.
+
+### Push
+
+Für ein Gerät, das gerade nicht verbunden ist, etwa die Web-App im Hintergrund, leitet der Server eine
+Nachricht über Web Push weiter (RFC 8030, VAPID nach RFC 8292). Nur mit der Web-App (`vapidKey` in
+`/v1/info`).
+
+**`push-subscribe`** meldet die Web-Push-Anmeldung dieser Instanz an, so wie der Browser sie liefert
+(`PushSubscription.toJSON()`). Eine neue ersetzt die alte, je Instanz gibt es eine.
+
+- `endpoint`: `https:`, höchstens 2048 Zeichen, und nur bei einem Push-Dienst, den der Server kennt:
+  `fcm.googleapis.com` (Chrome, Android), `updates.push.services.mozilla.com` (Firefox),
+  `*.push.apple.com` (Safari), `*.notify.windows.com` (Edge). Sonst `bad-request`: Der Server schickt an
+  diese Adresse, sie darf nirgends sonst hinführen.
+- `p256dh`: öffentlicher Schlüssel der Anmeldung, P-256 roh (65 Byte, base64url).
+- `auth`: Authentifizierungsgeheimnis, 16 Byte, base64url.
+
+Wird die Instanz entfernt, ist ihre Anmeldung auch weg.
+
+**`push`** schickt `body` an eine Instanz (`to`, kein `*`). Die Nutzlast ist genau das JSON der Nachricht,
+die ein `send` mit derselben `id`, `kind` und `body` zustellen würde:
+
+```json
+{ "t": "msg", "id": "<id der Anfrage>", "from": "<Absender>", "to": "<Empfänger>", "kind": "push.notify", "body": "…" }
+```
+
+Der Empfänger öffnet sie also wie eine Nachricht über den WebSocket. Der Server verschlüsselt sie für den
+Push-Dienst nach RFC 8291 (`aes128gcm`); `body` bleibt der Chiffretext der Geräte.
+
+- `urgency`: `normal` (Vorgabe) oder `high`; der Push-Dienst weckt ein schlafendes Gerät eher für `high`.
+- `ttl`: Sekunden, die der Push-Dienst ihn für ein Gerät ohne Netz aufhebt, 0 bis 86400, Vorgabe 3600.
+- Die Nutzlast darf höchstens 3993 Byte haben (4096 je Push, weniger Kopf und Tag der Verschlüsselung),
+  sonst `too-large`. Der Server rechnet sie aus, bevor er schickt.
+- Je sendender Instanz gehen 30 Pushes auf einmal, danach einer alle 2 Sekunden; darüber `rate-limited`.
+
+| Fehler | Wann |
+|---|---|
+| `unknown-instance` | `to` ist keine Instanz dieses Namespace |
+| `unsubscribed` | `to` hat keine Anmeldung, oder der Push-Dienst kennt sie nicht mehr (404, 410): Dann löscht der Server sie |
+| `too-large` | Nutzlast über 3993 Byte, oder der Push-Dienst lehnt die Größe ab (413) |
+| `rate-limited` | Zu viele Pushes dieser Instanz, oder der Push-Dienst bittet um Pause (429) |
+| `unreachable` | Der Push-Dienst antwortet nicht binnen 10 Sekunden, mit 5xx, oder ist nicht erreichbar |
+| `internal` | Der Push-Dienst lehnt den Push sonst ab (etwa die VAPID-Signatur) |
+
+Der Endpoint ist ein Zugangsschlüssel: Wer ihn kennt, kann der Instanz Pushes schicken (die sie allerdings
+nicht öffnen würde). Der Server loggt nur seinen Host.
 
 ### Ereignisse
 
@@ -193,6 +247,8 @@ Nutzer zeigt man etwas anhand von `code`.
 | `unreachable` | Die Instanz gibt es, sie ist aber nicht verbunden |
 | `busy` | Die Instanz liest zu langsam; später noch einmal versuchen |
 | `rate-limited` | Zu viele Nachrichten; diese wurde verworfen |
+| `unsubscribed` | `push`: Die Instanz hat keine Push-Anmeldung (mehr) |
+| `too-large` | `push`: Die Nutzlast passt nicht in einen Push |
 | `internal` | Fehler im Server |
 
 ### Schließen der Verbindung
@@ -255,3 +311,7 @@ Der Server ist für Inhalte nicht vertrauenswürdig. Was er über Instanzen sagt
    Anmeldung) oder mit einem paarweisen Schlüssel aus ECDH.
 4. **Nach `removed` den Schlüssel wechseln.** Ein Gerät erzeugt einen neuen Schlüssel und schickt ihn per
    ECDH an jede verbliebene anerkannte Instanz.
+5. **Pushes wie Nachrichten öffnen, aber mit eigener Frist.** Ein Push kommt bis zu `ttl` später an, eine
+   Prüfung auf frische Zeitstempel wie für den WebSocket würde ihn verwerfen. Stattdessen höchstens so alt
+   wie die größte `ttl` (24 Stunden, dazu etwas Spielraum für die Uhren) annehmen und nur, was der eigene
+   Empfang verträgt, wenn es doppelt kommt (eine Benachrichtigung mit festem `tag` ersetzt die vorige).

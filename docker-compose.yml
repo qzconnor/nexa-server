@@ -21,6 +21,8 @@ services:
       NEXA_RATE_LIMIT: ${NEXA_RATE_LIMIT:-100}
       NEXA_LOG_LEVEL: ${NEXA_LOG_LEVEL:-info}
       NEXA_PWA: ${NEXA_PWA:-false}
+      # Empty: the server puts the project's address in, which push services accept.
+      NEXA_VAPID_SUBJECT: ${NEXA_VAPID_SUBJECT:-}
     volumes:
       - data:/data
 

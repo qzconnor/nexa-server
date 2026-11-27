@@ -37,6 +37,13 @@ export interface Invite {
   expiresAt: number
 }
 
+/** A Web Push subscription as the browser made it (`PushSubscribeRequest`). */
+export interface PushSubscriptionRecord {
+  endpoint: string
+  p256dh: string
+  auth: string
+}
+
 export type StoreErrorCode =
   | 'namespace-invalid'
   | 'namespace-exists'
@@ -59,7 +66,7 @@ export interface StoreOptions {
   now?: () => number
 }
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 const SCHEMA_V1 = `
   CREATE TABLE namespaces (
@@ -88,6 +95,23 @@ const SCHEMA_V1 = `
   ) STRICT;
   CREATE INDEX invites_by_namespace ON invites(namespace);
   CREATE INDEX invites_by_creator ON invites(created_by);
+`
+
+const SCHEMA_V2 = `
+  -- The server's own settings that must survive a restart, such as its VAPID key pair.
+  CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  ) STRICT;
+
+  -- One Web Push subscription per instance; it goes with the instance.
+  CREATE TABLE push_subscriptions (
+    instance TEXT PRIMARY KEY REFERENCES instances(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  ) STRICT;
 `
 
 interface InstanceRow {
@@ -271,6 +295,55 @@ export class Store {
     return this.#run('UPDATE instances SET last_seen = ? WHERE id = ?', this.#now(), id).changes > 0
   }
 
+  // --- Settings and push --------------------------------------------------------------------------
+
+  /**
+   * The JSON setting `key`, made with `create` the first time. In one transaction, so the CLI's process
+   * and the server cannot both make one and keep different values.
+   */
+  setting<T>(key: string, create: () => T): T {
+    return this.#transaction(() => {
+      const row = this.#get('SELECT value FROM settings WHERE key = ?', key) as { value: string } | undefined
+      if (row) return JSON.parse(row.value) as T
+      const value = create()
+      this.#run('INSERT INTO settings (key, value) VALUES (?, ?)', key, JSON.stringify(value))
+      return value
+    })
+  }
+
+  /** Replaces the instance's push subscription. */
+  setPushSubscription(instance: string, subscription: PushSubscriptionRecord): void {
+    this.#run(
+      `INSERT INTO push_subscriptions (instance, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (instance) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh,
+         auth = excluded.auth, created_at = excluded.created_at`,
+      instance,
+      subscription.endpoint,
+      subscription.p256dh,
+      subscription.auth,
+      this.#now(),
+    )
+  }
+
+  getPushSubscription(instance: string): PushSubscriptionRecord | undefined {
+    const row = this.#get('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE instance = ?', instance) as
+      | PushSubscriptionRecord
+      | undefined
+    return row && { endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth }
+  }
+
+  /**
+   * Deletes the instance's subscription; with `endpoint` only if it is still that one, so a push service
+   * dropping an old subscription does not take the one that replaced it meanwhile.
+   */
+  deletePushSubscription(instance: string, endpoint?: string): boolean {
+    const result =
+      endpoint === undefined
+        ? this.#run('DELETE FROM push_subscriptions WHERE instance = ?', instance)
+        : this.#run('DELETE FROM push_subscriptions WHERE instance = ? AND endpoint = ?', instance, endpoint)
+    return result.changes > 0
+  }
+
   // --- Internals ----------------------------------------------------------------------------------
 
   #migrate(): void {
@@ -283,6 +356,7 @@ export class Store {
     if (version === SCHEMA_VERSION) return
     this.#transaction(() => {
       if (version < 1) this.#db.exec(SCHEMA_V1)
+      if (version < 2) this.#db.exec(SCHEMA_V2)
       this.#db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     })
   }

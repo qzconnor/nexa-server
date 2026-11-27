@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { Store, StoreError, type NewInstance } from './store.ts'
 
@@ -106,5 +110,47 @@ describe('instances', () => {
     expect(store.touchInstance(instance.id)).toBe(false)
     expect(store.renameInstance(instance.id, 'X')).toBe(false)
     expect(store.removeInstance(instance.id)).toBe(false)
+  })
+})
+
+describe('settings and push', () => {
+  beforeEach(() => store.createNamespace('connor'))
+
+  it('keep a setting once made', () => {
+    expect(store.setting('vapid', () => ({ key: 'a' }))).toEqual({ key: 'a' })
+    expect(store.setting('vapid', () => ({ key: 'b' }))).toEqual({ key: 'a' })
+  })
+
+  it('keep one subscription per instance, gone with the instance', () => {
+    const instance = store.redeemInvite(store.createInvite('connor', 1000).code, device())
+    const first = { endpoint: 'https://fcm.googleapis.com/1', p256dh: 'k1', auth: 'a1' }
+    const second = { endpoint: 'https://fcm.googleapis.com/2', p256dh: 'k2', auth: 'a2' }
+    expect(store.getPushSubscription(instance.id)).toBeUndefined()
+    store.setPushSubscription(instance.id, first)
+    store.setPushSubscription(instance.id, second)
+    expect(store.getPushSubscription(instance.id)).toEqual(second)
+    // A push service dropping the old one leaves the new one alone.
+    expect(store.deletePushSubscription(instance.id, first.endpoint)).toBe(false)
+    expect(store.getPushSubscription(instance.id)).toEqual(second)
+    store.removeInstance(instance.id)
+    expect(store.getPushSubscription(instance.id)).toBeUndefined()
+  })
+
+  it('takes a database of schema 1 to schema 2', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nexa-store-'))
+    try {
+      const path = join(dir, 'nexa.db')
+      // Schema 1 as an older server left it: today's, without what schema 2 added.
+      new Store(path, { maxInstances: 2 }).close()
+      const old = new DatabaseSync(path)
+      old.exec("DROP TABLE settings; DROP TABLE push_subscriptions; PRAGMA user_version = 1; INSERT INTO namespaces VALUES ('alt', 1)")
+      old.close()
+      const migrated = new Store(path, { maxInstances: 2 })
+      expect(migrated.hasNamespace('alt')).toBe(true)
+      expect(migrated.setting('x', () => 1)).toBe(1)
+      migrated.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

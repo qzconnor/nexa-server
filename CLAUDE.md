@@ -67,7 +67,9 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
 - `src/config.ts`: Umgebungsvariablen (`NEXA_*`), Liste in `README.md`.
 - `src/server.ts`: HTTP-Routen (`/`, `/v1/info`, `/health`, `/v1/join`, `/app/`) und das Upgrade auf `/v1/ws`.
 - `src/pwa.ts`: liefert den Build der Web-App aus dem Speicher aus, mit CSP, Caching und SPA-Fallback.
-- `src/relay.ts`: Verbindungen je Namespace, Anmeldung, Weiterleitung, Ereignisse, Heartbeat.
+- `src/relay.ts`: Verbindungen je Namespace, Anmeldung, Weiterleitung, Ereignisse, Heartbeat, Push.
+- `src/web-push.ts`: Web Push mit VAPID und Verschlüsselung nach RFC 8291 über `node:crypto`, nur an bekannte
+  Push-Dienste. Endpoints sind Zugangsschlüssel: nie loggen, nur ihren Host.
 - `src/store.ts`: SQLite-Schema und Zugriffe. Schemaänderungen über `PRAGMA user_version` (`SCHEMA_V2` …
   in `#migrate` ergänzen, nie bestehende Schritte ändern).
 - `src/codes.ts`: IDs, Einladungscodes (Crockford-Base32, nur der SHA-256-Hash wird gespeichert),

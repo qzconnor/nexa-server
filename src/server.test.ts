@@ -3,6 +3,7 @@
  * the desktop app and the PWA will talk to it.
  */
 
+import { createDecipheriv, createECDH, hkdfSync, randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join as joinPath } from 'node:path'
@@ -545,5 +546,167 @@ describe('web app', () => {
     expect(etag).toMatch(/^"[\w-]+"$/)
     const again = await fetch(`${app.url}/app/manifest.webmanifest`, { headers: { 'if-none-match': `W/${etag}` } })
     expect(again.status).toBe(304)
+  })
+})
+
+// --- Push -----------------------------------------------------------------------------------------
+
+describe('push', () => {
+  const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/phone-1'
+  let dir: string
+  let pushed: { url: string; headers: Record<string, string>; body: Buffer }[]
+  let status: number
+
+  /** A phone's subscription, and what its browser does with a push (RFC 8291). */
+  function phone() {
+    const ecdh = createECDH('prime256v1')
+    ecdh.generateKeys()
+    const auth = randomBytes(16)
+    return {
+      subscription: { endpoint: ENDPOINT, p256dh: ecdh.getPublicKey().toString('base64url'), auth: auth.toString('base64url') },
+      open(body: Buffer): unknown {
+        const salt = body.subarray(0, 16)
+        const asPublic = body.subarray(21, 21 + body[20]!)
+        const record = body.subarray(21 + body[20]!)
+        const info = Buffer.concat([Buffer.from('WebPush: info\0'), ecdh.getPublicKey(), asPublic])
+        const ikm = Buffer.from(hkdfSync('sha256', ecdh.computeSecret(asPublic), auth, info, 32))
+        const key = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16))
+        const nonce = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12))
+        const decipher = createDecipheriv('aes-128-gcm', key, nonce)
+        decipher.setAuthTag(record.subarray(-16))
+        const plain = Buffer.concat([decipher.update(record.subarray(0, -16)), decipher.final()])
+        return JSON.parse(plain.subarray(0, -1).toString('utf8'))
+      },
+    }
+  }
+
+  beforeEach(async () => {
+    dir = mkdtempSync(joinPath(tmpdir(), 'nexa-server-push-'))
+    writeFileSync(joinPath(dir, 'index.html'), '<!doctype html><title>Nexa</title>')
+    pushed = []
+    status = 201
+    await server.close()
+    server = await startServer({
+      config: { ...CONFIG, pwa: true, vapidSubject: 'mailto:admin@example.org' },
+      store,
+      log: silentLogger,
+      pwaDir: dir,
+      pushFetch: async (url, init) => {
+        pushed.push({ url: String(url), headers: init!.headers as Record<string, string>, body: Buffer.from(init!.body as Uint8Array) })
+        return new Response(null, { status })
+      },
+    })
+  })
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  async function subscribed() {
+    const a = await join('alpha', 'Computer')
+    const b = await join('alpha', 'Handy')
+    const { client: ca } = await online(a)
+    const { client: cb } = await online(b)
+    const device = phone()
+    cb.send({ t: 'push-subscribe', id: 's1', ...device.subscription })
+    expect(await cb.next('ok')).toEqual({ t: 'ok', re: 's1' })
+    return { a, b, ca, cb, device }
+  }
+
+  it('offers push with the web app only, with a key that stays', async () => {
+    const info = (await (await fetch(`${server.url}/v1/info`)).json()) as { vapidKey?: string }
+    expect(info.vapidKey).toMatch(/^[A-Za-z0-9_-]{87}$/)
+    await server.close()
+    server = await startServer({ config: { ...CONFIG, pwa: true }, store, log: silentLogger, pwaDir: dir })
+    expect(await (await fetch(`${server.url}/v1/info`)).json()).toMatchObject({ vapidKey: info.vapidKey })
+    await server.close()
+    server = await startServer({ config: CONFIG, store, log: silentLogger })
+    expect(await (await fetch(`${server.url}/v1/info`)).json()).not.toHaveProperty('vapidKey')
+  })
+
+  it('pushes exactly the message a send would relay, then stops after unsubscribing', async () => {
+    const { a, b, ca, cb, device } = await subscribed()
+    ca.send({ t: 'push', id: 'p1', to: b.id, kind: 'push.notify', body: 'c2VhbGVk', urgency: 'high', ttl: 60 })
+    expect(await ca.next('ok')).toEqual({ t: 'ok', re: 'p1' })
+    expect(pushed).toHaveLength(1)
+    const [{ url, headers, body }] = pushed as [(typeof pushed)[number]]
+    expect(url).toBe(ENDPOINT)
+    expect(headers).toMatchObject({ TTL: '60', Urgency: 'high', 'Content-Encoding': 'aes128gcm' })
+    const { vapidKey } = (await (await fetch(`${server.url}/v1/info`)).json()) as { vapidKey: string }
+    expect(headers.Authorization).toMatch(new RegExp(`^vapid t=[\\w-]+\\.[\\w-]+\\.[\\w-]+, k=${vapidKey}$`))
+    expect(device.open(body)).toEqual({ t: 'msg', id: 'p1', from: a.id, to: b.id, kind: 'push.notify', body: 'c2VhbGVk' })
+
+    ca.send({ t: 'push', id: 'p2', to: b.id, kind: 'push.notify' })
+    expect(await ca.next('ok')).toEqual({ t: 'ok', re: 'p2' })
+    expect(pushed[1]!.headers).toMatchObject({ TTL: '3600', Urgency: 'normal' })
+
+    cb.send({ t: 'push-unsubscribe', id: 'u1' })
+    expect(await cb.next('ok')).toEqual({ t: 'ok', re: 'u1' })
+    ca.send({ t: 'push', id: 'p3', to: b.id, kind: 'push.notify' })
+    expect(await ca.next('error')).toMatchObject({ re: 'p3', code: 'unsubscribed' })
+    expect(pushed).toHaveLength(2)
+  })
+
+  it('takes only push services it knows and real keys', async () => {
+    const a = await join('alpha')
+    const { client } = await online(a)
+    const { subscription } = phone()
+    const tries = [
+      { endpoint: 'http://fcm.googleapis.com/fcm/send/x' },
+      { endpoint: 'https://127.0.0.1/push' },
+      { endpoint: 'https://example.org/push' },
+      { p256dh: 'A'.repeat(87) },
+      { auth: 'short' },
+    ]
+    for (const [i, change] of tries.entries()) {
+      client.send({ t: 'push-subscribe', id: `s${i}`, ...subscription, ...change })
+      expect(await client.next('error', (e) => e.re === `s${i}`)).toMatchObject({ code: 'bad-request' })
+    }
+    expect(store.getPushSubscription(a.id)).toBeUndefined()
+  })
+
+  it('says what the push service said, and forgets a subscription it dropped', async () => {
+    const { b, ca } = await subscribed()
+    for (const [code, error] of [
+      [503, 'unreachable'],
+      [429, 'rate-limited'],
+      [413, 'too-large'],
+      [403, 'internal'],
+      [410, 'unsubscribed'],
+    ] as const) {
+      status = code
+      ca.send({ t: 'push', id: `p${code}`, to: b.id, kind: 'push.notify' })
+      expect(await ca.next('error', (e) => e.re === `p${code}`)).toMatchObject({ code: error })
+    }
+    expect(store.getPushSubscription(b.id)).toBeUndefined()
+  })
+
+  it('keeps namespaces apart, payloads small and pushes few', async () => {
+    const { b, ca } = await subscribed()
+    const c = await join('beta')
+    store.setPushSubscription(c.id, phone().subscription)
+    ca.send({ t: 'push', id: 'x1', to: c.id, kind: 'push.notify' })
+    expect(await ca.next('error', (e) => e.re === 'x1')).toMatchObject({ code: 'unknown-instance' })
+    ca.send({ t: 'push', id: 'x2', to: b.id, kind: 'push.notify', body: 'x'.repeat(4000) })
+    expect(await ca.next('error', (e) => e.re === 'x2')).toMatchObject({ code: 'too-large' })
+    ca.send({ t: 'push', id: 'x3', to: '*', kind: 'push.notify' })
+    expect(await ca.next('error', (e) => e.re === 'x3')).toMatchObject({ code: 'bad-request' })
+    expect(pushed).toHaveLength(0)
+
+    // Two of the budget went above; the rest go through, then the server says stop.
+    for (let i = 0; i < 28; i++) ca.send({ t: 'push', id: `r${i}`, to: b.id, kind: 'push.notify' })
+    for (let i = 0; i < 28; i++) await ca.next('ok', (m) => m.re === `r${i}`)
+    ca.send({ t: 'push', id: 'r-over', to: b.id, kind: 'push.notify' })
+    expect(await ca.next('error', (e) => e.re === 'r-over')).toMatchObject({ code: 'rate-limited' })
+  })
+
+  it('is off without the web app', async () => {
+    await server.close()
+    server = await startServer({ config: CONFIG, store, log: silentLogger })
+    const a = await join('alpha')
+    const b = await join('alpha')
+    const { client } = await online(a)
+    client.send({ t: 'push-subscribe', id: 's1', ...phone().subscription })
+    expect(await client.next('error', (e) => e.re === 's1')).toMatchObject({ code: 'bad-request' })
+    client.send({ t: 'push', id: 'p1', to: b.id, kind: 'push.notify' })
+    expect(await client.next('error', (e) => e.re === 'p1')).toMatchObject({ code: 'unsubscribed' })
   })
 })

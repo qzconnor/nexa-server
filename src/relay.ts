@@ -6,23 +6,41 @@
  */
 
 import type { RawData, WebSocket } from 'ws'
-import { verifyAuth } from './auth.ts'
+import { isPublicKey, verifyAuth } from './auth.ts'
 import { randomId } from './codes.ts'
 import type { Logger } from './log.ts'
 import {
   BROADCAST,
   CloseCode,
+  MAX_PUSH_PAYLOAD,
   PROTOCOL_VERSION,
+  PUSH_TTL_DEFAULT,
   parseClientMessage,
   type AuthMessage,
   type ClientRequest,
   type ErrorCode,
   type InstanceInfo,
+  type PushRequest,
+  type PushSubscribeRequest,
   type RelayedMessage,
   type ServerLimits,
   type ServerMessage,
 } from './protocol.ts'
 import type { InstanceRecord, Store } from './store.ts'
+import { isPushService, pushHost, type PushOutcome, type PushSender } from './web-push.ts'
+
+/** Pushes an instance may send at once, and how fast that refills: a burst of finished chats, not a flood. */
+const PUSH_BURST = 30
+const PUSH_PER_SECOND = 0.5
+
+/** What the sender hears when the push service did not take a push. */
+const PUSH_ERRORS: Record<Exclude<PushOutcome, 'ok'>, [ErrorCode, string]> = {
+  gone: ['unsubscribed', 'the push service no longer knows this subscription'],
+  'too-large': ['too-large', 'the push service refused the size'],
+  'rate-limited': ['rate-limited', 'the push service asks to slow down'],
+  rejected: ['internal', 'the push service refused the push'],
+  unreachable: ['unreachable', 'the push service did not answer'],
+}
 
 export interface RelayOptions {
   store: Store
@@ -36,6 +54,8 @@ export interface RelayOptions {
   authTimeoutMs?: number
   heartbeatMs?: number
   inviteTtlMs?: number
+  /** Web Push, when the server offers it (with the web app); without it nobody can subscribe. */
+  push?: PushSender | null
 }
 
 interface Connection {
@@ -56,6 +76,9 @@ export class Relay {
   readonly #maxBuffered: number
   readonly #authTimeoutMs: number
   readonly #inviteTtlMs: number
+  readonly #push: PushSender | null
+  /** Push budget per sending instance, kept across its connections so reconnecting does not refill it. */
+  readonly #pushTokens = new Map<string, { tokens: number; refilledAt: number }>()
   readonly #namespaces = new Map<string, Map<string, Connection>>()
   /** Every open socket, logged in or not; for the shutdown. */
   readonly #sockets = new Set<WebSocket>()
@@ -69,6 +92,7 @@ export class Relay {
     this.#maxBuffered = options.maxBufferedBytes
     this.#authTimeoutMs = options.authTimeoutMs ?? 10_000
     this.#inviteTtlMs = options.inviteTtlMs ?? 15 * 60_000
+    this.#push = options.push ?? null
     this.#heartbeat = setInterval(() => this.#beat(), options.heartbeatMs ?? 30_000)
     this.#heartbeat.unref()
   }
@@ -297,7 +321,105 @@ export class Relay {
         this.#broadcast(namespace, { t: 'instance', event: 'renamed', instance: this.#info({ ...target, name: msg.name }) })
         return
       }
+      case 'push-subscribe':
+        this.#async(connection, msg, () => this.#subscribe(connection, msg))
+        return
+      case 'push-unsubscribe':
+        this.#store.deletePushSubscription(connection.instance)
+        this.#send(ws, { t: 'ok', re: msg.id })
+        return
+      case 'push':
+        this.#async(connection, msg, () => this.#pushTo(connection, msg))
+        return
     }
+  }
+
+  /** A request answered later; a failure there is answered like one in `#handle`. */
+  #async(connection: Connection, msg: ClientRequest, run: () => Promise<void>): void {
+    run().catch((error: unknown) => {
+      this.#log.error(`Fehler bei „${msg.t}“ von Instanz ${connection.instance}: ${describe(error)}`)
+      this.#error(connection.ws, msg.id, 'internal', 'internal error')
+    })
+  }
+
+  // --- Push ---------------------------------------------------------------------------------------
+
+  async #subscribe(connection: Connection, msg: PushSubscribeRequest): Promise<void> {
+    const { ws } = connection
+    if (!this.#push) {
+      this.#error(ws, msg.id, 'bad-request', 'push is off on this server')
+      return
+    }
+    if (!isPushService(msg.endpoint)) {
+      this.#error(ws, msg.id, 'bad-request', 'endpoint: not a push service this server knows')
+      return
+    }
+    if (!(await isPublicKey(msg.p256dh, 'dh'))) {
+      this.#error(ws, msg.id, 'bad-request', 'p256dh: expected a raw P-256 public key')
+      return
+    }
+    // Removed while the key was checked: nothing to subscribe for.
+    if (!this.#store.hasInstance(connection.instance)) {
+      this.#removed(connection.namespace, connection.instance)
+      return
+    }
+    this.#store.setPushSubscription(connection.instance, { endpoint: msg.endpoint, p256dh: msg.p256dh, auth: msg.auth })
+    this.#log.info(`Instanz ${connection.instance} empfängt Push über ${pushHost(msg.endpoint)}`)
+    this.#send(ws, { t: 'ok', re: msg.id })
+  }
+
+  async #pushTo(connection: Connection, msg: PushRequest): Promise<void> {
+    const { ws, namespace } = connection
+    if (!this.#takePushToken(connection.instance)) {
+      this.#error(ws, msg.id, 'rate-limited', 'too many pushes, this one was dropped')
+      return
+    }
+    const target = this.#store.getInstance(msg.to)
+    if (target?.namespace !== namespace) {
+      this.#error(ws, msg.id, 'unknown-instance', 'no such instance in this namespace')
+      return
+    }
+    const subscription = this.#push && this.#store.getPushSubscription(target.id)
+    if (!this.#push || !subscription) {
+      this.#error(ws, msg.id, 'unsubscribed', 'the instance has no push subscription')
+      return
+    }
+    // The very message a `send` would relay, so the receiver opens it with the same code.
+    const message: RelayedMessage = { t: 'msg', id: msg.id, from: connection.instance, to: target.id, kind: msg.kind }
+    if (msg.body !== undefined) message.body = msg.body
+    const payload = JSON.stringify(message)
+    if (Buffer.byteLength(payload) > MAX_PUSH_PAYLOAD) {
+      this.#error(ws, msg.id, 'too-large', `the push would carry more than ${MAX_PUSH_PAYLOAD} bytes`)
+      return
+    }
+
+    const result = await this.#push.send(subscription, payload, { ttl: msg.ttl ?? PUSH_TTL_DEFAULT, urgency: msg.urgency ?? 'normal' })
+    const service = pushHost(subscription.endpoint)
+    if (result.outcome === 'ok') {
+      this.#log.debug(`Push von Instanz ${connection.instance} an ${target.id} („${msg.kind}“) über ${service}`)
+      this.#send(ws, { t: 'ok', re: msg.id })
+      return
+    }
+    if (result.outcome === 'gone') {
+      this.#store.deletePushSubscription(target.id, subscription.endpoint)
+      this.#log.info(`Push-Anmeldung von Instanz ${target.id} gelöscht: ${service} kennt sie nicht mehr`)
+    } else {
+      const level = result.outcome === 'rejected' ? 'warn' : 'debug'
+      this.#log[level](`Push an Instanz ${target.id} über ${service} ging nicht: ${result.status ?? result.outcome}`)
+    }
+    const [code, text] = PUSH_ERRORS[result.outcome]
+    this.#error(ws, msg.id, code, text)
+  }
+
+  #takePushToken(instance: string): boolean {
+    const now = performance.now()
+    const bucket = this.#pushTokens.get(instance) ?? { tokens: PUSH_BURST, refilledAt: now }
+    bucket.tokens = Math.min(PUSH_BURST, bucket.tokens + ((now - bucket.refilledAt) * PUSH_PER_SECOND) / 1000)
+    bucket.refilledAt = now
+    this.#pushTokens.set(instance, bucket)
+    if (bucket.tokens < 1) return false
+    bucket.tokens -= 1
+    return true
   }
 
   #relay(connection: Connection, id: string, to: string, kind: string, body: unknown): void {

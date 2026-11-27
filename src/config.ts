@@ -13,9 +13,14 @@ export interface Config {
   /** Messages per second and connection; bursts up to twice as many. */
   rateLimit: number
   logLevel: LogLevel
-  /** Serve the web app at `/app`; off by default, see README („Web-App“). */
+  /** Serve the web app at `/app`; off by default, see README („Web-App“). Push comes with it. */
   pwa: boolean
+  /** How push services reach the operator (`sub` of VAPID): `mailto:` or `https:`. */
+  vapidSubject: string
 }
+
+/** Without an address of the operator: the project's, a valid `https:` that push services accept. */
+export const DEFAULT_VAPID_SUBJECT = 'https://github.com/qzconnor/nexa-server'
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -39,7 +44,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     rateLimit: integer(env, 'NEXA_RATE_LIMIT', 100, 1, 100_000),
     logLevel,
     pwa: flag(env, 'NEXA_PWA'),
+    vapidSubject: vapidSubject(env),
   }
+}
+
+function vapidSubject(env: NodeJS.ProcessEnv): string {
+  const raw = env.NEXA_VAPID_SUBJECT?.trim()
+  if (!raw) return DEFAULT_VAPID_SUBJECT
+  // Apple refuses anything else, and refuses the push, not the setting: say so at the start.
+  if (!/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) && !/^https:\/\/[^\s/]+\.[^\s/]+(\/\S*)?$/.test(raw)) {
+    throw new ConfigError(`NEXA_VAPID_SUBJECT muss „mailto:name@domain“ oder eine https-Adresse sein, ist „${raw}“.`)
+  }
+  return raw
 }
 
 function flag(env: NodeJS.ProcessEnv, name: string): boolean {

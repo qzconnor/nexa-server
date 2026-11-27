@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { WebSocketServer } from 'ws'
 import pkg from '../package.json' with { type: 'json' }
 import { isPublicKey } from './auth.ts'
-import { ConfigError, type Config } from './config.ts'
+import { ConfigError, DEFAULT_VAPID_SUBJECT, type Config } from './config.ts'
 import type { Logger } from './log.ts'
 import {
   PROTOCOL_VERSION,
@@ -17,17 +17,20 @@ import {
 import { PWA_DIR, PWA_PATH, loadPwa, servePwa } from './pwa.ts'
 import { Relay } from './relay.ts'
 import { StoreError, type Store } from './store.ts'
+import { generateVapidKeys, WebPush } from './web-push.ts'
 
 export const VERSION: string = pkg.version
 
 export interface ServerOptions {
-  config: Pick<Config, 'host' | 'port' | 'maxMessageBytes' | 'rateLimit' | 'pwa'>
+  config: Pick<Config, 'host' | 'port' | 'maxMessageBytes' | 'rateLimit' | 'pwa'> & Partial<Pick<Config, 'vapidSubject'>>
   store: Store
   log: Logger
   /** The built web app, served when `config.pwa` is on; `dist/app` next to src unless given. */
   pwaDir?: string
   authTimeoutMs?: number
   heartbeatMs?: number
+  /** Tests answer pushes here instead of a push service. */
+  pushFetch?: typeof fetch
 }
 
 export interface RunningServer {
@@ -59,6 +62,15 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   if (config.pwa && !pwa) {
     throw new ConfigError(`NEXA_PWA ist an, aber die Web-App fehlt in ${pwaDir}. Bauen mit: npm run build:pwa`)
   }
+  // Push only with the web app: nothing else subscribes. The key pair stays, or every phone would have
+  // to subscribe anew.
+  const push = pwa
+    ? new WebPush({
+        keys: store.setting('vapid', generateVapidKeys),
+        subject: config.vapidSubject ?? DEFAULT_VAPID_SUBJECT,
+        fetch: options.pushFetch,
+      })
+    : null
   const relay = new Relay({
     store,
     log,
@@ -67,6 +79,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     maxBufferedBytes: config.maxMessageBytes * 16,
     authTimeoutMs: options.authTimeoutMs,
     heartbeatMs: options.heartbeatMs,
+    push,
   })
   // No compression: bodies are ciphertext, and deflate per socket costs memory a relay should not spend.
   const wss = new WebSocketServer({
@@ -77,6 +90,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   })
 
   const info: ServerInfo = { name: 'nexa-server', version: VERSION, protocol: PROTOCOL_VERSION, pwa: pwa !== null }
+  if (push) info.vapidKey = push.publicKey
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const path = pathOf(req)

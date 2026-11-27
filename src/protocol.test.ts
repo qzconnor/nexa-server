@@ -53,6 +53,32 @@ describe('parseClientMessage', () => {
     expect(parse({ t: 'rename', id: '1', name: '' }).ok).toBe(false)
   })
 
+  it('reads the push requests', () => {
+    const subscription = { endpoint: 'https://fcm.googleapis.com/fcm/send/x', p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) }
+    expect(parse({ t: 'push-subscribe', id: '1', ...subscription, extra: 1 })).toEqual({
+      ok: true,
+      msg: { t: 'push-subscribe', id: '1', ...subscription },
+    })
+    expect(parse({ t: 'push-subscribe', id: '1', ...subscription, endpoint: 'http://fcm.googleapis.com/x' }).ok).toBe(false)
+    expect(parse({ t: 'push-subscribe', id: '1', ...subscription, endpoint: `https://x.org/${'a'.repeat(2048)}` }).ok).toBe(false)
+    expect(parse({ t: 'push-subscribe', id: '1', ...subscription, p256dh: 'B'.repeat(86) }).ok).toBe(false)
+    expect(parse({ t: 'push-subscribe', id: '1', ...subscription, auth: 'a'.repeat(23) }).ok).toBe(false)
+    expect(parse({ t: 'push-unsubscribe', id: '1' })).toEqual({ ok: true, msg: { t: 'push-unsubscribe', id: '1' } })
+
+    expect(parse({ t: 'push', id: 'p', to: 'abc', kind: 'push.notify', body: 'x', urgency: 'high', ttl: 60 })).toEqual({
+      ok: true,
+      msg: { t: 'push', id: 'p', to: 'abc', kind: 'push.notify', body: 'x', urgency: 'high', ttl: 60 },
+    })
+    expect(parse({ t: 'push', id: 'p', to: 'abc', kind: 'push.notify' })).toEqual({
+      ok: true,
+      msg: { t: 'push', id: 'p', to: 'abc', kind: 'push.notify' },
+    })
+    expect(parse({ t: 'push', id: 'p', to: '*', kind: 'k' }).ok).toBe(false)
+    expect(parse({ t: 'push', id: 'p', to: 'abc', kind: 'k', urgency: 'low' }).ok).toBe(false)
+    expect(parse({ t: 'push', id: 'p', to: 'abc', kind: 'k', ttl: 86_401 }).ok).toBe(false)
+    expect(parse({ t: 'push', id: 'p', to: 'abc', kind: 'k', ttl: 1.5 }).ok).toBe(false)
+  })
+
   it('rejects junk', () => {
     expect(parseClientMessage('{').ok).toBe(false)
     expect(parse([1, 2]).ok).toBe(false)

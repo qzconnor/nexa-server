@@ -1,10 +1,12 @@
+import { watch } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { chooseComputer } from './computers'
+import { isPaired, linkState, pendingPairingCode, whenLinkKnown } from './link'
 import ChatsView from './views/ChatsView.vue'
 import ChatView from './views/ChatView.vue'
 import InboxView from './views/InboxView.vue'
-import PairView from './views/PairView.vue'
 import SettingsView from './views/SettingsView.vue'
+import SetupView from './views/SetupView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -15,6 +17,8 @@ declare module 'vue-router' {
     back?: boolean
     /** The page takes the whole height below the header, without the bar (a chat with its composer). */
     fullscreen?: boolean
+    /** A page on its own, without header and dock: setting this device up, before anything else is there. */
+    setup?: boolean
   }
 }
 
@@ -40,7 +44,33 @@ export const router = createRouter({
       meta: { title: 'Chat', tab: 'chats', back: true, fullscreen: true },
     },
     { path: '/settings', name: 'settings', component: SettingsView, meta: { title: 'Einstellungen', tab: 'settings' } },
-    { path: '/pair', name: 'pair', component: PairView, meta: { title: 'Koppeln', tab: 'settings', back: true } },
+    { path: '/setup', name: 'setup', component: SetupView, meta: { title: 'Einrichten', setup: true } },
+    // The setup page's old address, from bookmarks and links of earlier versions.
+    { path: '/pair', redirect: '/setup' },
     { path: '/:rest(.*)*', redirect: '/' },
   ],
 })
+
+/**
+ * Unpaired, there is only the setup page: every other address leads there, and nothing of the rest shows
+ * (no tabs, no empty lists). Paired, the setup page leads home. Before the browser's storage is read
+ * nobody knows which, so the first navigation waits for it.
+ */
+router.beforeEach(async (to) => {
+  const paired = isPaired(await whenLinkKnown())
+  if (!paired && to.name !== 'setup') return { name: 'setup' }
+  if (paired && to.name === 'setup') {
+    // A code from a link has no use here: it holds the namespace's key, so it goes rather than lingers.
+    pendingPairingCode.value = null
+    return { path: '/' }
+  }
+  return true
+})
+
+// Unpaired while in use (signed out here, or this device removed elsewhere): back to the setup page at once.
+watch(
+  () => linkState.value.status,
+  (status) => {
+    if (status === 'unpaired' && router.currentRoute.value.name !== 'setup') void router.replace({ name: 'setup' })
+  },
+)

@@ -3,7 +3,7 @@ import { LoaderCircle, LogOut } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { link } from '../client'
-import { linkState } from '../link'
+import { isPaired, linkState } from '../link'
 
 const STATUS: Record<string, string> = {
   connecting: 'Verbinde …',
@@ -12,7 +12,7 @@ const STATUS: Record<string, string> = {
   stopped: 'Getrennt',
 }
 
-const paired = computed(() => linkState.value.status !== 'unpaired' && linkState.value.status !== 'loading')
+const paired = computed(() => isPaired(linkState.value))
 const confirming = ref(false)
 const leaving = ref(false)
 
@@ -33,7 +33,7 @@ async function unpair(): Promise<void> {
 
     <div v-if="!paired" class="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3 text-sm">
       <span class="text-muted-foreground">{{ linkState.status === 'loading' ? '…' : 'Nicht gekoppelt' }}</span>
-      <RouterLink v-if="linkState.status === 'unpaired'" to="/pair" class="font-medium text-primary">Koppeln</RouterLink>
+      <RouterLink v-if="linkState.status === 'unpaired'" to="/setup" class="font-medium text-primary">Koppeln</RouterLink>
     </div>
 
     <template v-else>

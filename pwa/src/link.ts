@@ -1,5 +1,6 @@
-import { reactive, ref, shallowRef } from 'vue'
+import { reactive, ref, shallowRef, watch } from 'vue'
 import { link, remote } from './client'
+import type { LinkState } from './client/link-service'
 import { RemoteError } from './client/remote/remote-client'
 import { PAIRING_PREFIX } from './shared/nexa-server/pairing-code'
 import type { RemoteHostInfo } from './shared/remote'
@@ -15,7 +16,24 @@ export interface HostAnswer {
 }
 export const hosts = reactive(new Map<string, HostAnswer>())
 
-/** A pairing code from a link (`/app#nexa1:…`), for the pairing page; never in the address bar for long. */
+/** Whether this device is paired: once the browser's storage is read, connected or not. */
+export function isPaired(state: LinkState): boolean {
+  return state.status !== 'unpaired' && state.status !== 'loading'
+}
+
+/** The pairing once the browser's storage is read: before that, nobody can say whether there is one. */
+export function whenLinkKnown(): Promise<LinkState> {
+  if (linkState.value.status !== 'loading') return Promise.resolve(linkState.value)
+  return new Promise((resolve) => {
+    const stop = watch(linkState, (state) => {
+      if (state.status === 'loading') return
+      stop()
+      resolve(state)
+    })
+  })
+}
+
+/** A pairing code from a link (`/app#nexa1:…`), for the setup page; never in the address bar for long. */
 export const pendingPairingCode = ref<string | null>(null)
 
 /** Counts logins: each one asks every computer again, as its answer may have changed meanwhile. */

@@ -745,6 +745,23 @@ export interface WindowState {
   fullscreen: boolean
 }
 
+/** What the main process asks or tells, shown in the main window's own dialog as `ui.confirm` does. */
+export interface AppDialogOptions {
+  title: string
+  description?: string
+  /** `alert`: a message with one button. */
+  kind?: 'confirm' | 'alert'
+  confirmText?: string
+  cancelText?: string
+  destructive?: boolean
+  warning?: boolean
+}
+
+export interface AppDialogRequest extends AppDialogOptions {
+  /** Comes back with the answer (`app:dialog-answer`). */
+  id: number
+}
+
 export interface ApiStatus {
   running: boolean
   port: number | null

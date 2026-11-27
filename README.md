@@ -121,7 +121,13 @@ Stand:
 - Koppeln und Abmelden. Die Computer des Namespace stehen mit dem, was sie dem Handy erlauben.
 - Die Chats eines Computers: Liste mit Suche, darin was gerade läuft, wartet oder ungelesen ist.
 - Einen Chat lesen, live: Antworten, Werkzeuge, Agents, Rückfragen, ältere Nachrichten beim Hochscrollen.
+  Gedanken, Befehle und Änderungen an Dateien stehen offen im Verlauf (Änderungen eingeklappt, wenn der
+  Computer es unter Einstellungen › Chat so will), Lesen, Suchen und andere Werkzeuge auf Tipp. Änderungen
+  wie in der Desktop-App: mit Zeilennummern und dem Code in den Farben seiner Sprache.
 - Ab der Stufe „Prompts senden“ eigene Prompts schicken und abbrechen.
+- Unter der Eingabe die offenen Pull Requests des Repositorys, in dem der Chat arbeitet, wie in der
+  Desktop-App: der des Branches mit Nummer und Stand, ein Tipp zeigt alle und öffnet einen auf GitHub. Der
+  Computer liest sie mit seiner GitHub CLI (`gh`); ohne sie oder ohne Anmeldung zeigt sich nichts.
 - Die Inbox über alle Computer: was wartet, was abgebrochen oder am Limit ist, was fertig und ungelesen ist,
   was gerade läuft. Die Zahl am Tab zählt, was wartet oder abgebrochen ist.
 - Mit der Stufe „Alles, wie am Gerät selbst“ Rückfragen, Freigaben, Pläne und Formulare beantworten, in

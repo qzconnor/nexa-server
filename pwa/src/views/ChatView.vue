@@ -8,6 +8,7 @@ import { RESPONDER } from '../components/chat/respond'
 import ShellDock from '../components/chat/ShellDock.vue'
 import TimelineBlocks from '../components/chat/TimelineBlocks.vue'
 import UserMessage from '../components/chat/UserMessage.vue'
+import { provideProjectPath } from '../composables/useProjectPath'
 import { computerById, computerStatus } from '../computers'
 import { duration, resumeText } from '../format'
 import { host } from '../host'
@@ -255,8 +256,14 @@ const placeholder = computed(() => {
 })
 
 const canFull = computed(() => level.value !== null && levelAllows(level.value, 'full'))
-/** The chat's folder on the computer: the commands of its CLI are those of the folder. */
-const cwd = computed(() => host.projects.value.find((p) => p.id === meta.value?.projectId)?.path)
+/**
+ * The folder the chat's agent works in on the computer, as `cwdOf` of the app: its own (a folder in the
+ * project, a worktree) or the project's. The commands of its CLI and its branch's pull request are those
+ * of the folder.
+ */
+const cwd = computed(() => meta.value?.cwd ?? host.projects.value.find((p) => p.id === meta.value?.projectId)?.path)
+// The timeline names files in it relative to it, as the app's chat window does.
+provideProjectPath(computed(() => cwd.value ?? null))
 
 async function send(text: string, images: string[]): Promise<void> {
   await host.call(IpcInvoke.sessionsSend, [props.chat, images.length ? { text, images } : { text }])

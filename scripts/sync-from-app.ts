@@ -50,6 +50,17 @@ const EXTRA: Record<string, string> = {
   'src/renderer/src/lib/format.ts': 'lib/format.ts',
   // The names and colours of the thinking efforts, for the composer's settings.
   'src/renderer/src/lib/effort.ts': 'lib/effort.ts',
+  // How an open pull request stands (tone and word), for the chip under the composer.
+  'src/renderer/src/lib/pull-requests.ts': 'lib/pull-requests.ts',
+  // A change to a file as the chat window shows it: its lines with numbers, coloured like its code
+  // (highlight.js); syntax.ts takes its `DiffLine` type from file-diff.ts, which needs word-diff.ts.
+  'src/renderer/src/lib/diff.ts': 'lib/diff.ts',
+  'src/renderer/src/lib/syntax.ts': 'lib/syntax.ts',
+  'src/renderer/src/lib/hljs-vue.ts': 'lib/hljs-vue.ts',
+  'src/renderer/src/lib/file-diff.ts': 'lib/file-diff.ts',
+  'src/renderer/src/lib/word-diff.ts': 'lib/word-diff.ts',
+  // Paths in the chat's folder relative to it, as the chat window names the files it changed.
+  'src/renderer/src/composables/useProjectPath.ts': 'composables/useProjectPath.ts',
   'src/main/server-link/connection.ts': 'client/server-link/connection.ts',
   'src/main/server-link/device-channel.ts': 'client/server-link/device-channel.ts',
   'src/main/server-link/membership.ts': 'client/server-link/membership.ts',

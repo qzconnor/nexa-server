@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ChevronRight, Globe, LoaderCircle, Wrench } from '@lucide/vue'
 import { computed, ref } from 'vue'
+import { host } from '../../host'
 import { browserStep, nexaToolView, toolSummary } from '../../lib/tools'
 import type { ToolItem } from '../../shared/chat'
 import ToolRow from './ToolRow.vue'
+import { groupOpensByItself } from './unfold'
 
 /**
- * Tool calls in a row, folded to one line as in the app ("2 Dateien bearbeitet · 3 Befehle"); the
- * running one shows its title. `browser`: the agent's steps in Nexa's browser.
+ * Tool calls in a row under their summary ("2 Dateien bearbeitet · 3 Befehle"), the running one by its
+ * title: open while a command or a change is among them (unfold.ts), else folded to that one line, until
+ * a tap decides. `browser`: the agent's steps in Nexa's browser.
  */
 const props = defineProps<{ tools: ToolItem[]; browser?: boolean }>()
 
-const open = ref(false)
+/** What a tap chose; null: as the calls are (a command that comes later opens the run). */
+const toggled = ref<boolean | null>(null)
+const open = computed(() => toggled.value ?? groupOpensByItself(props.tools, host.limits.settings?.chat?.collapseDiffs === true, props.browser))
 const running = computed(() => props.tools.findLast((t) => t.status === 'running' || t.status === 'pending'))
 const failed = computed(() => props.tools.filter((t) => t.status === 'error').length)
 const summary = computed(() => {
@@ -32,7 +37,7 @@ const now = computed(() => {
       type="button"
       class="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm text-muted-foreground hover:bg-accent"
       :aria-expanded="open"
-      @click="open = !open"
+      @click="toggled = !open"
     >
       <component :is="browser ? Globe : Wrench" class="size-4 shrink-0" />
       <span class="min-w-0 truncate">{{ summary }}</span>

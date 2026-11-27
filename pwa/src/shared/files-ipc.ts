@@ -11,6 +11,7 @@ import type {
   TimedTouch,
   WorktreeCheck,
 } from './files'
+import type { PullRequestList } from './pull-requests'
 
 type Unsubscribe = () => void
 
@@ -36,6 +37,7 @@ export const FilesInvoke = {
   gitWebUrl: 'git:web-url',
   gitMainWorktree: 'git:main-worktree',
   gitWorktreeCheck: 'git:worktree-check',
+  gitPullRequests: 'git:pull-requests',
 } as const
 
 export const FilesEvent = {
@@ -59,6 +61,11 @@ export interface GitApi {
   mainWorktree(cwd: string): Promise<string | null>
   /** Whether a chat in `cwd` (absolute) can get a worktree of its own, and which there are. */
   worktreeCheck(cwd: string): Promise<WorktreeCheck>
+  /**
+   * The open pull requests of the repository `cwd` lies in, from the GitHub CLI; kept a minute per
+   * repository unless `fresh`.
+   */
+  pullRequests(cwd: string, fresh?: boolean): Promise<PullRequestList>
 }
 
 /** The file panel of a chat. Paths in a tree are relative to its folder and `/`-separated. */

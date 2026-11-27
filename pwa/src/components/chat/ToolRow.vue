@@ -6,13 +6,14 @@ import { host } from '../../host'
 import { changeLines, changeStats } from '../../lib/diff'
 import { browserStep, nexaToolView, TOOL_META } from '../../lib/tools'
 import type { ToolItem } from '../../shared/chat'
+import { unfoldSettings } from '../../unfold-settings'
 import DiffView from './DiffView.vue'
 import RenderSpecView from './RenderSpecView.vue'
 import { opensByItself } from './unfold'
 
 /**
  * One tool call: what it did in one line, its input and output when opened. Commands, changes and
- * failures come opened (unfold.ts), the rest when tapped. What it changed shows as in the app's chat
+ * failures come opened as the settings say (unfold.ts), the rest when tapped. What it changed shows as in the app's chat
  * window: the file in the line with its counted lines, its diff with line numbers and coloured code below.
  */
 const props = defineProps<{ tool: ToolItem; browser?: boolean }>()
@@ -23,7 +24,7 @@ const OUTPUT_SHOWN = 6000
 const { relative, shorten } = useProjectPath()
 /** What a tap chose; null: as the call is (a diff or a failure that comes later opens it). */
 const toggled = ref<boolean | null>(null)
-const open = computed(() => toggled.value ?? opensByItself(props.tool, host.limits.settings?.chat?.collapseDiffs === true))
+const open = computed(() => toggled.value ?? opensByItself(props.tool, unfoldSettings, host.limits.settings?.chat?.collapseDiffs === true))
 const meta = computed(() => TOOL_META[props.tool.tool] ?? TOOL_META.other)
 const view = computed(() => (props.browser ? browserStep(props.tool) : nexaToolView(props.tool)))
 const title = computed(() => view.value?.title ?? props.tool.title)

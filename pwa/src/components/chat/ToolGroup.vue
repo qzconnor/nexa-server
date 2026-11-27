@@ -4,19 +4,22 @@ import { computed, ref } from 'vue'
 import { host } from '../../host'
 import { browserStep, nexaToolView, toolSummary } from '../../lib/tools'
 import type { ToolItem } from '../../shared/chat'
+import { unfoldSettings } from '../../unfold-settings'
 import ToolRow from './ToolRow.vue'
 import { groupOpensByItself } from './unfold'
 
 /**
  * Tool calls in a row under their summary ("2 Dateien bearbeitet · 3 Befehle"), the running one by its
- * title: open while a command or a change is among them (unfold.ts), else folded to that one line, until
- * a tap decides. `browser`: the agent's steps in Nexa's browser.
+ * title: open while one among them opens by itself (unfold.ts), else folded to that one line, until a
+ * tap decides. `browser`: the agent's steps in Nexa's browser.
  */
 const props = defineProps<{ tools: ToolItem[]; browser?: boolean }>()
 
-/** What a tap chose; null: as the calls are (a command that comes later opens the run). */
+/** What a tap chose; null: as the calls are (a failure that comes later opens the run). */
 const toggled = ref<boolean | null>(null)
-const open = computed(() => toggled.value ?? groupOpensByItself(props.tools, host.limits.settings?.chat?.collapseDiffs === true, props.browser))
+const open = computed(
+  () => toggled.value ?? groupOpensByItself(props.tools, unfoldSettings, host.limits.settings?.chat?.collapseDiffs === true, props.browser),
+)
 const running = computed(() => props.tools.findLast((t) => t.status === 'running' || t.status === 'pending'))
 const failed = computed(() => props.tools.filter((t) => t.status === 'error').length)
 const summary = computed(() => {

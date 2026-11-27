@@ -120,9 +120,13 @@ Stand:
 - Die Chats eines Computers: Liste mit Suche, darin was gerade läuft, wartet oder ungelesen ist.
 - Einen Chat lesen, live: Antworten, Werkzeuge, Agents, Rückfragen, ältere Nachrichten beim Hochscrollen.
 - Ab der Stufe „Prompts senden“ eigene Prompts schicken und abbrechen.
+- Die Inbox über alle Computer: was wartet, was abgebrochen oder am Limit ist, was fertig und ungelesen ist,
+  was gerade läuft. Die Zahl am Tab zählt, was wartet oder abgebrochen ist.
+- Mit der Stufe „Alles, wie am Gerät selbst“ Rückfragen, Freigaben, Pläne und Formulare beantworten, in
+  der Inbox und im Chat. Darunter zeigt die Web-App sie nur an.
 
-Die Inbox und das Beantworten von Rückfragen folgen, ebenso Bilder. Die Stufe stellt man am Computer unter
-Einstellungen › Geräte ein; ohne eigenen Eintrag darf die Web-App nur mitlesen.
+Bilder und Benachrichtigungen (Push) folgen. Die Stufe stellt man am Computer unter Einstellungen › Geräte
+ein; ohne eigenen Eintrag darf die Web-App nur mitlesen.
 
 **Warum sie aus ist**: Für die Web-App ist der Server nicht blind. Sie hält wie jedes Gerät den Schlüssel
 des Namespace, ihren Code lädt der Browser aber bei jedem Start vom Server. Wer den Server übernimmt (oder

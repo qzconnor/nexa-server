@@ -2,10 +2,13 @@
 import { ChevronLeft, Inbox, MessagesSquare, Settings } from '@lucide/vue'
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { inbox } from './inbox'
 import { pageTitle } from './page-title'
 
 const route = useRoute()
 const router = useRouter()
+/** Questions to answer and chats that broke, on every computer: on the tab, from any page. */
+const attention = inbox.attention
 
 const tabs = [
   { id: 'inbox', to: '/', label: 'Inbox', icon: Inbox },
@@ -69,8 +72,17 @@ function back(): void {
           :class="route.meta.tab === tab.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground'"
           :aria-current="route.meta.tab === tab.id ? 'page' : undefined"
         >
-          <component :is="tab.icon" class="size-5" :stroke-width="route.meta.tab === tab.id ? 2.25 : 1.75" />
+          <span class="relative">
+            <component :is="tab.icon" class="size-5" :stroke-width="route.meta.tab === tab.id ? 2.25 : 1.75" />
+            <span
+              v-if="tab.id === 'inbox' && attention"
+              class="absolute -top-1.5 left-3 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-semibold text-primary-foreground tabular-nums"
+            >
+              {{ attention > 99 ? '99+' : attention }}
+            </span>
+          </span>
           {{ tab.label }}
+          <span v-if="tab.id === 'inbox' && attention" class="sr-only">, {{ attention }} brauchen dich</span>
         </RouterLink>
       </div>
     </nav>

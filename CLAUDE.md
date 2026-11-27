@@ -22,7 +22,7 @@ Chiffretext, den die Geräte erzeugen. Konzept: `../nexa-app/docs/NEXA-SERVER.md
   `docs/PROTOCOL.md`. Was nicht abwärtskompatibel ist, braucht eine neue Version (`/v2/…`).
 - **`src/protocol.ts` und `src/auth.ts` bleiben ohne Node-APIs** (nur WebCrypto, `TextEncoder`,
   `btoa`/`atob`), weil die App und die PWA sie übernehmen.
-- **`pwa/src/shared/`, die Kopien in `pwa/src/client/` und `pwa/src/lib/{tools,code-colors}.ts` nie von Hand
+- **`pwa/src/shared/`, die Kopien in `pwa/src/client/` und `pwa/src/lib/{tools,code-colors,shells,usage,format,effort}.ts` nie von Hand
   ändern**: Code der App, Byte für Byte (Liste: `EXTRA` in `scripts/sync-from-app.ts`), abgeglichen mit
   `npm run sync:app`. Änderungen gehören in die App (bzw. nach `src/protocol.ts`, `src/auth.ts`).
 - **Markdown nur über `pwa/src/lib/markdown.ts`** (markdown-it mit `html: false`): Nur so ist `v-html` sicher,

@@ -44,21 +44,21 @@ function submit(): void {
   <form class="flex flex-col gap-4" @submit.prevent="submit">
     <fieldset v-for="q in questions" :key="q.id" class="flex flex-col gap-2">
       <legend class="mb-1 flex flex-wrap items-center gap-2">
-        <span v-if="q.header" class="rounded bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary">{{ q.header }}</span>
+        <span v-if="q.header" class="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">{{ q.header }}</span>
         <span>{{ q.question }}</span>
       </legend>
       <button
         v-for="option in q.options"
         :key="option.label"
         type="button"
-        class="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-accent"
-        :class="picked[q.id]!.includes(option.label) ? 'border-primary bg-primary/10' : 'border-border'"
+        class="flex items-start gap-3 rounded-[0.875rem] border px-3.5 py-2.5 text-left transition-colors"
+        :class="picked[q.id]!.includes(option.label) ? 'border-primary/60 bg-primary/10' : 'border-foreground/10 bg-foreground/[0.03] hover:bg-foreground/[0.07] active:bg-foreground/10'"
         :aria-pressed="picked[q.id]!.includes(option.label)"
         @click="toggle(q, option.label)"
       >
         <span
           class="mt-0.5 flex size-4 shrink-0 items-center justify-center border"
-          :class="[q.multiSelect ? 'rounded' : 'rounded-full', picked[q.id]!.includes(option.label) ? 'border-primary bg-primary text-primary-foreground' : 'border-input']"
+          :class="[q.multiSelect ? 'rounded-[4px]' : 'rounded-full', picked[q.id]!.includes(option.label) ? 'border-primary bg-primary text-primary-foreground' : 'border-foreground/25']"
         >
           <Check v-if="picked[q.id]!.includes(option.label)" class="size-3" :stroke-width="3" />
         </span>

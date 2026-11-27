@@ -38,8 +38,8 @@ const canRetry = computed(() => linkState.value.status === 'offline' || linkStat
   <div
     v-if="visible"
     role="status"
-    class="flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm"
-    :class="linkState.error ? 'border-destructive/40 bg-destructive/10' : 'border-border bg-card'"
+    class="glass card-round pane-edge flex items-start gap-3 border px-4 py-3 text-sm"
+    :class="linkState.error ? 'border-destructive/40 bg-destructive/10' : 'border-foreground/10'"
   >
     <LoaderCircle v-if="linkState.status === 'connecting'" class="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
     <CloudOff v-else class="mt-0.5 size-4 shrink-0" :class="linkState.error ? 'text-destructive' : 'text-muted-foreground'" />

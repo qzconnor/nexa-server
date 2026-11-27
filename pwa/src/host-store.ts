@@ -1,9 +1,10 @@
 import { reactive, ref, shallowReactive, shallowRef } from 'vue'
-import type { ChatItem, SessionEvent, SessionRuntime } from './shared/chat'
+import type { ChatItem, ProviderId, SessionEvent, SessionRuntime } from './shared/chat'
 import { IpcEvent, IpcInvoke } from './shared/ipc'
 import { SESSIONS_OLDER, type RemoteBroadcast, type RemoteItems } from './shared/remote'
 import type { RemoteWatch } from './shared/remote-ipc'
-import type { Project, SessionDetail, SessionMeta } from './shared/types'
+import type { Account } from './shared/accounts'
+import type { AppSettings, ModelOption, Project, ProviderStatus, ProviderUsage, SessionDetail, SessionMeta } from './shared/types'
 
 /** The part of the Remote Control client the store needs (client/remote/remote-client.ts). */
 export interface HostRemote {
@@ -65,6 +66,24 @@ export function createHostStore(remote: HostRemote) {
   const list = reactive({ loaded: false, loading: false, error: null as string | null })
   /** The chat on screen. */
   const activeId = ref<string | null>(null)
+  /**
+   * The computer's plan limits, its accounts, the account each CLI starts with and the CLIs' models:
+   * what a chat's header needs to show the limits that count for it. Asked for once a page wants them
+   * (`loadLimits`), kept by the computer's events after that.
+   */
+  const limits = reactive({
+    usage: [] as ProviderUsage[],
+    accounts: [] as Account[],
+    defaults: {} as Partial<Record<ProviderId, string>>,
+    models: {} as Partial<Record<ProviderId, ModelOption[]>>,
+    /** The computer's CLIs (installed, version) and its settings (which are switched on): the chat's CLI menu. */
+    providers: [] as ProviderStatus[],
+    settings: null as AppSettings | null,
+    loaded: false,
+  })
+  let limitsAsked = false
+  /** A CLI's models are asked for once per computer; missing in `limits.models` while the answer is out. */
+  const modelsAsked = new Set<ProviderId>()
   /** Changes with every other computer: answers for the one before don't count any more. */
   let generation = 0
 
@@ -97,7 +116,49 @@ export function createHostStore(remote: HostRemote) {
     chats.clear()
     activeId.value = null
     Object.assign(list, { loaded: false, loading: false, error: null })
+    Object.assign(limits, { usage: [], accounts: [], defaults: {}, models: {}, providers: [], settings: null, loaded: false })
+    limitsAsked = false
+    modelsAsked.clear()
     remote.setWatch([])
+  }
+
+  /**
+   * The plan limits with what picks among them, once per computer; the models of `provider` too (a CLI
+   * whose limits differ by model). Quietly nothing where the computer refuses: the header shows none.
+   */
+  async function loadLimits(provider: ProviderId): Promise<void> {
+    const at = instance.value
+    if (!at) return
+    const gen = generation
+    if (!modelsAsked.has(provider)) {
+      modelsAsked.add(provider)
+      void remote.invoke(at, IpcInvoke.providersModels, [provider]).then(
+        (models) => {
+          if (gen === generation) limits.models[provider] = Array.isArray(models) ? (models as ModelOption[]) : []
+        },
+        () => {
+          if (gen === generation) limits.models[provider] = []
+        },
+      )
+    }
+    if (limitsAsked) return
+    limitsAsked = true
+    try {
+      const [usage, accounts, settings, providers] = await Promise.all([
+        remote.invoke(at, IpcInvoke.usageGet, []),
+        remote.invoke(at, IpcInvoke.accountsList, []),
+        remote.invoke(at, IpcInvoke.settingsGet, []),
+        remote.invoke(at, IpcInvoke.providersList, []),
+      ])
+      if (gen !== generation) return
+      limits.usage = Array.isArray(usage) ? (usage as ProviderUsage[]) : []
+      limits.accounts = entries<Account>(accounts)
+      setSettings(settings as AppSettings | null)
+      limits.providers = Array.isArray(providers) ? (providers as ProviderStatus[]) : []
+      limits.loaded = true
+    } catch {
+      if (gen === generation) limitsAsked = false
+    }
   }
 
   /** The chats, what runs, the projects; again after the computer lost track of this device. */
@@ -207,6 +268,12 @@ export function createHostStore(remote: HostRemote) {
     return remote.invoke(at, ch, args)
   }
 
+  function setSettings(settings: AppSettings | null): void {
+    if (!settings) return
+    limits.settings = settings
+    limits.defaults = settings.defaults?.accounts ?? limits.defaults
+  }
+
   /** The window events of the computer shown (`rc.events`), its lists whole again. */
   function onEvents(from: string, events: readonly RemoteBroadcast[]): void {
     if (from !== instance.value) return
@@ -214,6 +281,10 @@ export function createHostStore(remote: HostRemote) {
       if (ch === IpcEvent.sessionsChanged) sessions.value = entries<SessionMeta>(args[0])
       else if (ch === IpcEvent.projectsChanged) projects.value = entries<Project>(args[0])
       else if (ch === IpcEvent.sessionEvent) onSessionEvent(args[0] as SessionEvent)
+      else if (ch === IpcEvent.usageChanged && Array.isArray(args[0])) limits.usage = args[0] as ProviderUsage[]
+      else if (ch === IpcEvent.accountsChanged) limits.accounts = entries<Account>(args[0])
+      else if (ch === IpcEvent.settingsChanged) setSettings(args[0] as AppSettings | null)
+      else if (ch === IpcEvent.providersChanged && Array.isArray(args[0])) limits.providers = args[0] as ProviderStatus[]
     }
   }
 
@@ -278,7 +349,7 @@ export function createHostStore(remote: HostRemote) {
     }
   }
 
-  return { instance, sessions, projects, runtimes, chats, list, activeId, runtime, show, reset, load, open, leave, loadOlder, call, onEvents, resync }
+  return { instance, sessions, projects, runtimes, chats, list, activeId, limits, runtime, show, reset, load, loadLimits, open, leave, loadOlder, call, onEvents, resync }
 }
 
 export type HostStore = ReturnType<typeof createHostStore>

@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { CircleAlert, CircleHelp, LoaderCircle, Pin, Search } from '@lucide/vue'
+import { LoaderCircle, MessagesSquare, Pin, Search, SearchX } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { shortTime } from '../format'
 import { host } from '../host'
 import { isUnread } from '../shared/chat'
 import type { SessionMeta } from '../shared/types'
+import ChatMark, { type ChatState } from './ChatMark.vue'
 
-/** The chats of a computer, the latest first (pinned on top), each with what it does now. */
+/**
+ * The chats of a computer, the latest first (pinned on top), in the glass of the bars: each with its CLI's
+ * mark and what it does now as a badge on it, like a messenger's list.
+ */
 const props = defineProps<{ instance: string }>()
 
 watch(
@@ -36,8 +40,6 @@ const chats = computed(() => {
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt)
 })
 
-type ChatState = 'running' | 'waiting' | 'error' | 'unread' | null
-
 function stateOf(meta: SessionMeta): ChatState {
   const { status } = host.runtime(meta.id)
   if (status === 'waiting') return 'waiting'
@@ -45,57 +47,58 @@ function stateOf(meta: SessionMeta): ChatState {
   if (status === 'error') return 'error'
   return isUnread(meta) ? 'unread' : null
 }
-
-const STATE_LABEL: Record<Exclude<ChatState, null>, string> = {
-  running: 'Arbeitet',
-  waiting: 'Wartet auf eine Antwort',
-  error: 'Fehler',
-  unread: 'Ungelesen',
-}
 </script>
 
 <template>
   <section aria-label="Chats" class="space-y-3">
-    <label class="flex items-center gap-2 rounded-xl border border-input bg-card px-3 focus-within:ring-2 focus-within:ring-ring/50">
+    <label class="glass bar-round pane-edge flex h-11 items-center gap-2.5 border border-foreground/10 px-4 transition-colors focus-within:border-ring/60">
       <Search class="size-4 shrink-0 text-muted-foreground" />
       <input
         v-model="query"
         type="search"
-        class="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+        class="h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
         placeholder="Chats durchsuchen"
         aria-label="Chats durchsuchen"
       />
     </label>
 
-    <div v-if="host.list.error" class="space-y-3 rounded-lg border border-border bg-card px-3 py-3 text-sm">
+    <div v-if="host.list.error" class="glass card-round pane-edge space-y-3 border border-foreground/10 px-4 py-3 text-sm">
       <p class="text-destructive">{{ host.list.error }}</p>
-      <button type="button" class="rounded-md border border-border px-3 py-1.5 hover:bg-accent" @click="host.load()">Erneut versuchen</button>
+      <button type="button" class="btn btn-outline h-8" @click="host.load()">Erneut versuchen</button>
     </div>
-    <div v-else-if="!host.list.loaded" class="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+    <div v-else-if="!host.list.loaded" class="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
       <LoaderCircle class="size-4 animate-spin" />
       Lädt die Chats …
     </div>
-    <p v-else-if="!chats.length" class="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-      {{ query ? 'Kein Chat passt.' : 'Auf diesem Computer gibt es noch keine Chats.' }}
-    </p>
-    <ul v-else class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-      <li v-for="meta in chats.slice(0, limit)" :key="meta.id">
-        <RouterLink :to="`/chats/${instance}/${meta.id}`" class="flex items-start gap-3 px-3 py-2.5 hover:bg-accent">
-          <span class="mt-1 flex size-4 shrink-0 items-center justify-center" :title="stateOf(meta) ? STATE_LABEL[stateOf(meta)!] : undefined">
-            <LoaderCircle v-if="stateOf(meta) === 'running'" class="size-4 animate-spin text-primary" />
-            <CircleHelp v-else-if="stateOf(meta) === 'waiting'" class="size-4 text-warning" />
-            <CircleAlert v-else-if="stateOf(meta) === 'error'" class="size-4 text-destructive" />
-            <span v-else-if="stateOf(meta) === 'unread'" class="size-2 rounded-full bg-primary" />
-            <span v-if="stateOf(meta)" class="sr-only">{{ STATE_LABEL[stateOf(meta)!] }}</span>
-          </span>
+    <div v-else-if="!chats.length" class="flex flex-col items-center gap-2 px-4 py-16 text-center">
+      <component :is="query ? SearchX : MessagesSquare" class="size-7 text-muted-foreground" />
+      <p class="font-medium">{{ query ? 'Kein Chat passt' : 'Noch keine Chats' }}</p>
+      <p class="max-w-xs text-sm text-muted-foreground">
+        {{ query ? 'Gesucht wird in Titel, Projekt und letzter Nachricht.' : 'Chats, die du auf diesem Computer anfängst, erscheinen hier.' }}
+      </p>
+    </div>
+    <ul v-else class="glass card-round pane-edge border border-foreground/10 p-1.5">
+      <li v-for="(meta, i) in chats.slice(0, limit)" :key="meta.id">
+        <!-- Inset as far as the text, as in a phone's lists: the marks stand on their own. -->
+        <div v-if="i > 0" class="mr-3 ml-[3.9rem] h-px bg-foreground/[0.07]" aria-hidden="true" />
+        <RouterLink
+          :to="`/chats/${instance}/${meta.id}`"
+          class="flex items-center gap-3 rounded-[0.875rem] px-2.5 py-2.5 transition-colors hover:bg-foreground/5 active:bg-foreground/10"
+        >
+          <ChatMark :provider="meta.provider" :state="stateOf(meta)" />
           <span class="min-w-0 flex-1">
             <span class="flex items-baseline gap-2">
               <span class="min-w-0 flex-1 truncate" :class="stateOf(meta) === 'unread' ? 'font-semibold' : 'font-medium'">{{ meta.title }}</span>
               <Pin v-if="meta.pinned" class="size-3 shrink-0 self-center text-muted-foreground" aria-label="Angeheftet" />
-              <span class="shrink-0 text-xs text-muted-foreground">{{ shortTime(meta.updatedAt) }}</span>
+              <span class="shrink-0 text-xs tabular-nums" :class="stateOf(meta) === 'unread' ? 'text-primary' : 'text-muted-foreground'">
+                {{ shortTime(meta.updatedAt) }}
+              </span>
             </span>
-            <span class="block truncate text-sm text-muted-foreground">
-              {{ projectNames.get(meta.projectId) ?? 'Ohne Projekt' }}<template v-if="meta.preview"> · {{ meta.preview }}</template>
+            <span class="mt-0.5 flex items-center gap-2">
+              <span class="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                {{ projectNames.get(meta.projectId) ?? 'Ohne Projekt' }}<template v-if="meta.preview"> · {{ meta.preview }}</template>
+              </span>
+              <span v-if="stateOf(meta) === 'unread'" class="size-2.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
             </span>
           </span>
         </RouterLink>
@@ -104,7 +107,7 @@ const STATE_LABEL: Record<Exclude<ChatState, null>, string> = {
     <button
       v-if="chats.length > limit"
       type="button"
-      class="w-full rounded-lg border border-border bg-card py-2 text-sm text-muted-foreground hover:bg-accent"
+      class="glass bar-round pane-edge h-11 w-full border border-foreground/10 text-sm text-muted-foreground transition-colors hover:text-foreground"
       @click="limit += PAGE"
     >
       Weitere {{ Math.min(PAGE, chats.length - limit) }} von {{ chats.length - limit }} anzeigen

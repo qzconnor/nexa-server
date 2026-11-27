@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { chooseComputer } from './computers'
 import ChatsView from './views/ChatsView.vue'
 import ChatView from './views/ChatView.vue'
-import HostView from './views/HostView.vue'
 import InboxView from './views/InboxView.vue'
 import PairView from './views/PairView.vue'
 import SettingsView from './views/SettingsView.vue'
@@ -23,7 +23,14 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'inbox', component: InboxView, meta: { title: 'Inbox', tab: 'inbox' } },
     { path: '/chats', name: 'chats', component: ChatsView, meta: { title: 'Chats', tab: 'chats' } },
-    { path: '/chats/:host', name: 'host', component: HostView, props: true, meta: { title: 'Computer', tab: 'chats', back: true } },
+    // A computer's own page is the chats tab with it picked: a link to it, or the way back from a chat opened directly.
+    {
+      path: '/chats/:host',
+      redirect: (to) => {
+        chooseComputer(String(to.params.host))
+        return { name: 'chats' }
+      },
+    },
     {
       path: '/chats/:host/:chat',
       name: 'chat',

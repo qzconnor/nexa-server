@@ -26,6 +26,8 @@ const SHARED_ENTRIES = [
   'nexa-server/pairing-code.ts',
   // What a computer pushes to the phone; the service worker reads it.
   'push.ts',
+  // A shell's output as text (lib/shells.ts passes it on).
+  'terminal.ts',
   'themes/builtin.ts',
   'themes/checks.ts',
   'themes/colors.ts',
@@ -41,6 +43,13 @@ const EXTRA: Record<string, string> = {
   'src/renderer/src/lib/code-colors.ts': 'lib/code-colors.ts',
   // How the chat window groups a timeline and names its tools: the phone shows a chat the same way.
   'src/renderer/src/lib/tools.ts': 'lib/tools.ts',
+  // Which shells and how they are doing, over the composer as in the chat window.
+  'src/renderer/src/lib/shells.ts': 'lib/shells.ts',
+  // The plan limits in a chat's header, as in the title bar; format.ts is what usage.ts imports.
+  'src/renderer/src/lib/usage.ts': 'lib/usage.ts',
+  'src/renderer/src/lib/format.ts': 'lib/format.ts',
+  // The names and colours of the thinking efforts, for the composer's settings.
+  'src/renderer/src/lib/effort.ts': 'lib/effort.ts',
   'src/main/server-link/connection.ts': 'client/server-link/connection.ts',
   'src/main/server-link/device-channel.ts': 'client/server-link/device-channel.ts',
   'src/main/server-link/membership.ts': 'client/server-link/membership.ts',

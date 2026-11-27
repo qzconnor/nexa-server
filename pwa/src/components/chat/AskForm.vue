@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { FormField, FormRequest, FormValue } from '../../shared/chat'
+import CheckBox from '../CheckBox.vue'
+import ToggleSwitch from '../ToggleSwitch.vue'
 import MarkdownText from './MarkdownText.vue'
 
 /**
@@ -59,7 +61,7 @@ const id = (field: FormField) => `ask-${field.key}`
     <div v-for="field in request.fields" :key="field.key" class="flex flex-col gap-1">
       <label v-if="field.type === 'boolean'" :for="id(field)" class="flex items-center justify-between gap-3 py-1">
         <span class="font-medium">{{ field.label }}</span>
-        <input :id="id(field)" v-model="values[field.key]" type="checkbox" class="size-5 accent-(--primary)" />
+        <ToggleSwitch :id="id(field)" :model-value="!!values[field.key]" @update:model-value="(on) => (values[field.key] = on)" />
       </label>
       <label v-else :for="id(field)" class="font-medium">
         {{ field.label }}<span v-if="field.required" class="text-destructive"> *</span>
@@ -72,12 +74,7 @@ const id = (field: FormField) => `ask-${field.key}`
       </select>
       <div v-else-if="field.type === 'multiselect'" :id="id(field)" class="flex flex-col gap-1">
         <label v-for="option in field.options" :key="option" class="flex items-center gap-2.5 py-1">
-          <input
-            type="checkbox"
-            class="size-5 accent-(--primary)"
-            :checked="(values[field.key] as string[]).includes(option)"
-            @change="toggle(field, option, ($event.target as HTMLInputElement).checked)"
-          />
+          <CheckBox :model-value="(values[field.key] as string[]).includes(option)" @update:model-value="(on) => toggle(field, option, on)" />
           {{ option }}
         </label>
       </div>

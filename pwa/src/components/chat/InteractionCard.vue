@@ -15,8 +15,9 @@ import { RESPONDER } from './respond'
  * A question of the agent, answered right here as in the app: a permission for a tool, questions
  * with options, a plan to approve, a form of an MCP server or of the agent (`ask_user`). Once answered
  * it shrinks to what was decided. Without the level `full` it only shows what is asked.
+ * A pane of glass of its own in a chat; `flat` inside one already there (the inbox's entry of its chat).
  */
-const props = defineProps<{ item: InteractionItem }>()
+const props = defineProps<{ item: InteractionItem; flat?: boolean }>()
 const responder = inject(RESPONDER, null)
 
 const PLAN_MODES: PermissionMode[] = ['edits', 'ask', 'auto', 'full']
@@ -29,6 +30,8 @@ const feedback = ref('')
 const planMode = ref<PermissionMode>('edits')
 
 const pending = computed(() => props.item.state === 'pending')
+/** Flat, it lines up with the row of its chat above it. */
+const pad = computed(() => (props.flat ? 'px-2.5' : 'px-3.5'))
 const request = computed(() => props.item.request)
 const allowed = computed(() => !!responder?.allowed())
 
@@ -111,10 +114,16 @@ const heading = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-xl border text-sm" :class="pending ? 'border-primary/50 bg-card shadow-lg shadow-primary/5' : 'border-border bg-card/40'">
-    <div class="flex items-center gap-2 px-3" :class="pending ? 'pt-3 pb-2' : 'py-2'">
-      <component :is="icon" class="size-4 shrink-0" :class="pending ? 'text-primary' : 'text-muted-foreground'" />
-      <span class="min-w-0 font-medium break-words" :class="{ 'truncate text-muted-foreground': !pending }">{{ heading }}</span>
+  <div
+    class="text-sm"
+    :class="flat ? '' : ['glass card-round pane-edge border', pending ? 'border-primary/40' : 'border-foreground/10']"
+  >
+    <div class="flex items-center gap-2.5" :class="[pad, pending ? 'pt-3 pb-2.5' : 'py-2.5']">
+      <span v-if="pending" class="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+        <component :is="icon" class="size-4" />
+      </span>
+      <component :is="icon" v-else class="size-4 shrink-0 text-muted-foreground" />
+      <span class="min-w-0 break-words" :class="pending ? 'font-semibold' : 'truncate font-medium text-muted-foreground'">{{ heading }}</span>
       <span v-if="!pending" class="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Check v-if="item.state === 'answered'" class="size-3.5 shrink-0" />
         <X v-else class="size-3.5 shrink-0" />
@@ -122,24 +131,24 @@ const heading = computed(() => {
       </span>
     </div>
 
-    <ol v-if="answered.length" class="space-y-2 px-3 pt-0.5 pb-3">
+    <ol v-if="answered.length" class="space-y-2.5 pt-0.5 pb-3" :class="pad">
       <li v-for="{ q, answer: text } in answered" :key="q.id" class="space-y-0.5">
         <p class="flex items-baseline gap-2 text-xs text-muted-foreground">
-          <span v-if="q.header" class="shrink-0 rounded bg-muted px-1.5 py-px font-medium">{{ q.header }}</span>
+          <span v-if="q.header" class="shrink-0 rounded-full bg-foreground/10 px-2 py-px font-medium">{{ q.header }}</span>
           <span class="line-clamp-2">{{ q.question }}</span>
         </p>
         <p class="break-words whitespace-pre-wrap">{{ text || '–' }}</p>
       </li>
     </ol>
 
-    <dl v-if="formAnswers.length" class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 px-3 pt-0.5 pb-3 text-xs">
+    <dl v-if="formAnswers.length" class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 pt-0.5 pb-3 text-xs" :class="pad">
       <template v-for="entry in formAnswers" :key="entry.key">
         <dt class="text-muted-foreground">{{ entry.label }}</dt>
         <dd class="break-words whitespace-pre-wrap">{{ entry.text || '–' }}</dd>
       </template>
     </dl>
 
-    <div v-if="pending" class="flex flex-col gap-3 px-3 pb-3">
+    <div v-if="pending" class="flex flex-col gap-3" :class="[pad, flat ? 'pb-2.5' : 'pb-3.5']">
       <!-- What is asked; answered here when the computer allows it, else only shown. -->
       <template v-if="request.type === 'permission'">
         <p v-if="request.description" class="text-muted-foreground">{{ request.description }}</p>
@@ -179,7 +188,7 @@ const heading = computed(() => {
         <template v-else>
           <div v-for="q in request.questions" :key="q.id" class="space-y-1">
             <p class="flex flex-wrap items-center gap-2">
-              <span v-if="q.header" class="rounded bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary">{{ q.header }}</span>
+              <span v-if="q.header" class="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">{{ q.header }}</span>
               <span>{{ q.question }}</span>
             </p>
             <ul v-if="q.options.length" class="space-y-0.5 text-muted-foreground">
@@ -190,7 +199,7 @@ const heading = computed(() => {
       </template>
 
       <template v-else-if="request.type === 'plan'">
-        <div class="max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-background/40 px-3 py-2.5">
+        <div class="max-h-[50vh] overflow-y-auto overscroll-contain rounded-[0.75rem] border border-foreground/10 bg-foreground/[0.04] px-3.5 py-3">
           <MarkdownText :text="request.plan" />
         </div>
         <template v-if="allowed">
@@ -199,7 +208,7 @@ const heading = computed(() => {
             <button type="button" class="btn btn-primary" :disabled="busy" @click="answer({ type: 'plan', approve: true, mode: planMode })">
               Plan annehmen
             </button>
-            <select v-model="planMode" class="field h-9 w-auto py-0 text-xs" aria-label="Danach arbeiten mit">
+            <select v-model="planMode" class="field h-10 w-auto rounded-full py-0 text-xs" aria-label="Danach arbeiten mit">
               <option v-for="mode in PLAN_MODES" :key="mode" :value="mode">danach: {{ PERMISSION_MODES[mode].label }}</option>
             </select>
             <button
@@ -240,7 +249,7 @@ const heading = computed(() => {
         </template>
       </template>
 
-      <p v-if="error" role="alert" class="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
+      <p v-if="error" role="alert" class="rounded-[0.75rem] border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
       <p v-if="!responder" class="text-xs text-primary">Wartet auf eine Antwort.</p>
       <p v-else-if="!allowed" class="text-xs text-primary">
         Wartet auf eine Antwort. Hier antworten erlaubt der Computer mit der Stufe „{{ REMOTE_LEVEL_LABELS.full }}“ (Einstellungen › Geräte).

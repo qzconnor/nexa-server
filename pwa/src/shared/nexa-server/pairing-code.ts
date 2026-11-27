@@ -53,6 +53,15 @@ export function webSocketUrl(url: string): string {
   return `${url.replace(/^http/, 'ws')}/v1/ws`
 }
 
+/**
+ * The server's web app with a pairing code in the fragment, for the QR code under „Gerät hinzufügen“.
+ * `url` is the code's own `u`: the web app compares it with where it runs and refuses another spelling.
+ * With the slash, since `/app` only redirects there; the fragment never reaches the server.
+ */
+export function webAppPairingLink(url: string, code: string): string {
+  return `${url}/app/#${code}`
+}
+
 export function isPairingCode(text: string): boolean {
   return text.trim().toLowerCase().startsWith(PAIRING_PREFIX)
 }

@@ -191,6 +191,12 @@ export interface ActivitySeconds {
  */
 export type NotifyWhen = 'background' | 'hidden'
 
+/**
+ * When a chat's notification also goes to the phones paired with the web app: never, while the user is
+ * away from this computer (screen locked, or no input for a while), or always.
+ */
+export type PushWhen = 'off' | 'away' | 'always'
+
 /** How Nexa points to chats that are done or need the user, and to limits and logins of the accounts. */
 export interface NotificationSettings {
   /** Main switch (also the bell in the title bar): off, Nexa never interrupts. */
@@ -218,6 +224,8 @@ export interface NotificationSettings {
   sound: boolean
   /** The taskbar button flashes until the window is in front. */
   flashTaskbar: boolean
+  /** The same notifications of chats to the phones with the web app of the nexa-server. */
+  push: PushWhen
 }
 
 export interface ApiSettings {

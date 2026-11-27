@@ -6,11 +6,17 @@
 
 import { keyIdOf, randomNamespaceKey } from '@shared/nexa-server/envelope'
 import { encodePairingCode } from '@shared/nexa-server/pairing-code'
+import { pushNotice, PUSH_KIND } from '@shared/push'
 import { RemoteKind, type RemoteHostInfo } from '@shared/remote'
+import { createDecipheriv, createECDH, hkdfSync, randomBytes } from 'node:crypto'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { silentLogger } from '../../../src/log.ts'
 import { startServer, type RunningServer } from '../../../src/server.ts'
 import { Store } from '../../../src/store.ts'
+import { openPush, pushNotification } from '../push/open'
 import { LinkService } from './link-service'
 import { RemoteClient } from './remote/remote-client'
 import { ServerConnection } from './server-link/connection'
@@ -33,15 +39,27 @@ class MemoryStorage implements LinkStorage {
 
 let store: Store
 let server: RunningServer
+let pwaDir: string
+/** What the server handed to the push service. */
+let pushed: Buffer[]
 const cleanup: (() => void | Promise<void>)[] = []
 
 beforeEach(async () => {
   store = new Store(':memory:', { maxInstances: 5 })
   store.createNamespace('alpha')
+  // With the web app, so with push; the push service is a fake that keeps what it gets.
+  pwaDir = mkdtempSync(join(tmpdir(), 'nexa-pwa-'))
+  writeFileSync(join(pwaDir, 'index.html'), '<!doctype html><title>Nexa</title>')
+  pushed = []
   server = await startServer({
-    config: { host: '127.0.0.1', port: 0, maxMessageBytes: 64 * 1024, rateLimit: 1000, pwa: false },
+    config: { host: '127.0.0.1', port: 0, maxMessageBytes: 64 * 1024, rateLimit: 1000, pwa: true },
     store,
     log: silentLogger,
+    pwaDir,
+    pushFetch: async (_url, init) => {
+      pushed.push(Buffer.from(init!.body as Uint8Array))
+      return new Response(null, { status: 201 })
+    },
   })
 })
 
@@ -49,6 +67,7 @@ afterEach(async () => {
   for (const each of cleanup.splice(0).reverse()) await each()
   await server.close()
   store.close()
+  rmSync(pwaDir, { recursive: true, force: true })
 })
 
 async function until(check: () => boolean, what: string, timeoutMs = 5000): Promise<void> {
@@ -104,11 +123,35 @@ async function startComputer(name = 'Desktop') {
     instance,
     connection,
     membership,
+    channel,
     /** What „Gerät hinzufügen“ shows. */
     async pairingCode(url = server.url): Promise<string> {
       const answer = await connection.request({ t: 'invite' })
       if (answer.t !== 'invite') throw new Error('no invite')
       return encodePairingCode({ url, invite: answer.code, key: raw, gen: 1 })
+    },
+  }
+}
+
+/** A browser's push subscription, and what the browser does with a push (RFC 8291) before the service worker gets it. */
+function browserPush() {
+  const ecdh = createECDH('prime256v1')
+  ecdh.generateKeys()
+  const auth = randomBytes(16)
+  return {
+    subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/test', p256dh: ecdh.getPublicKey().toString('base64url'), auth: auth.toString('base64url') },
+    open(body: Buffer): unknown {
+      const salt = body.subarray(0, 16)
+      const asPublic = body.subarray(21, 21 + body[20]!)
+      const record = body.subarray(21 + body[20]!)
+      const info = Buffer.concat([Buffer.from('WebPush: info\0'), ecdh.getPublicKey(), asPublic])
+      const ikm = Buffer.from(hkdfSync('sha256', ecdh.computeSecret(asPublic), auth, info, 32))
+      const key = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16))
+      const nonce = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12))
+      const decipher = createDecipheriv('aes-128-gcm', key, nonce)
+      decipher.setAuthTag(record.subarray(-16))
+      const plain = Buffer.concat([decipher.update(record.subarray(0, -16)), decipher.final()])
+      return JSON.parse(plain.subarray(0, -1).toString('utf8'))
     },
   }
 }
@@ -203,5 +246,37 @@ describe('LinkService', () => {
     await until(() => link.getState().status === 'unpaired', 'the removal')
     expect(link.getState().error).toMatch(/aus dem Namespace entfernt/)
     expect(storage.link).toBeNull()
+  })
+
+  it('gets the pushes of a computer once subscribed, and opens them as the service worker does', async () => {
+    const computer = await startComputer()
+    const { link, storage } = startLink()
+    await link.init()
+    await link.pair({ code: await computer.pairingCode(), name: 'iPhone' })
+    const phone = link.getState().instance!
+    // The service worker reads the members from storage, as it can't ask this page.
+    await until(() => storage.link?.members.some((m) => m.id === computer.instance) ?? false, 'the computer to be a member in storage')
+    await until(() => computer.membership.isMember(phone), 'the phone to be a member at the computer')
+    const browser = browserPush()
+    await link.subscribePush(browser.subscription)
+
+    // As the desktop app pushes (server-link-service.ts, `push`).
+    const notice = pushNotice('done', 'chat_1', 'Claude ist fertig', 'Mein Chat\nAlles erledigt.')
+    const sealed = (await computer.channel.sealed(phone, PUSH_KIND, notice))!
+    await computer.connection.request({ t: 'push', id: sealed.id, to: phone, kind: PUSH_KIND, body: sealed.body, urgency: 'normal', ttl: 3600 })
+    expect(pushed).toHaveLength(1)
+    const opened = await openPush(browser.open(pushed[0]!), storage.link!)
+    expect(opened).toEqual({ from: computer.instance, notice })
+    expect(pushNotification(opened!, storage.link!)).toMatchObject({ tag: `${computer.instance}:chat_1`, path: `chats/${computer.instance}/chat_1` })
+
+    await link.unsubscribePush()
+    const again = { t: 'push', id: sealed.id, to: phone, kind: PUSH_KIND, body: sealed.body } as const
+    await expect(computer.connection.request(again)).rejects.toMatchObject({ code: 'unsubscribed' })
+  })
+
+  it('subscribes to pushes only while connected', async () => {
+    const { link } = startLink()
+    await link.init()
+    await expect(link.subscribePush(browserPush().subscription)).rejects.toMatchObject({ code: 'offline' })
   })
 })

@@ -23,6 +23,12 @@ export const SETTING_RANGES = {
 } as const
 
 /**
+ * Without input this long (minutes), or with the screen locked, the user counts as away from this
+ * computer: the notifications of chats go to the phones too (`notifications.push` „Wenn du weg bist“).
+ */
+export const PUSH_AWAY_MINUTES = 3
+
+/**
  * How long the file tree's activity may keep a file (seconds), as Einstellungen › Allgemein offers it;
  * a settings file is held to it too.
  */
@@ -105,6 +111,8 @@ export function defaultSettings(): AppSettings {
       preview: true,
       sound: true,
       flashTaskbar: true,
+      // A phone that turned notifications on in the web app wants them, but not while one sits here.
+      push: 'away',
     },
     api: {
       enabled: false,

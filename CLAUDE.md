@@ -41,7 +41,7 @@ npm run dev:pwa      # Web-App mit Vite (Proxy für /v1 auf den Server)
 npm run build:pwa    # Web-App nach dist/app (NEXA_PWA=true liefert sie aus)
 npm run sync:app     # geteilten Code aus ../nexa-app nach pwa/src/shared kopieren (--check: nur prüfen)
 npm run cli -- …     # Admin-CLI, z. B. npm run cli -- namespace create test
-npm run typecheck    # tsc --noEmit für den Server, vue-tsc für pwa/
+npm run typecheck    # tsc --noEmit für den Server, vue-tsc für pwa/, tsc für den Service Worker
 npm test             # Vitest, Tests liegen als *.test.ts neben dem Modul
 docker build -t nexa-server .   # Image wie im Betrieb
 ```
@@ -83,6 +83,10 @@ Vor dem Abschluss einer Änderung: `npm run typecheck` und `npm test`.
   `pwa/src/inbox-store.ts`: die Inbox über alle Computer (`sessions:inbox`, neu geholt nach Ereignissen).
   `pwa/src/watches.ts`: Host-Store und Inbox beobachten Computer gemeinsam über einen `setWatch`.
   Antworten auf Rückfragen gibt die Seite über `RESPONDER` (`components/chat/respond.ts`) an die Karten.
+  `pwa/src/sw.ts`: der Service Worker (nur Push und Klick, kein Cache, kein `fetch`), vom Plugin in
+  `vite.config.ts` als klassisches Skript nach `dist/app/sw.js` gebaut, mit eigenem `tsconfig.sw.json`
+  (WebWorker statt DOM). `pwa/src/push/`: Push öffnen und prüfen (`open.ts`, auch im Service Worker),
+  Anmeldung im Browser und beim Server (`subscription.ts`).
 - `scripts/sync-from-app.ts`: kopiert den geteilten Code aus der App nach `pwa/src/shared`.
 
 ## Konventionen

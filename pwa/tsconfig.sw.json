@@ -1,0 +1,10 @@
+{
+  // The service worker runs where there is no DOM; its own lib, so it can't reach for window or document.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "WebWorker"],
+    "types": []
+  },
+  "include": ["src/sw.ts", "src/sw.test.ts"],
+  "exclude": []
+}

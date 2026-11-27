@@ -6,6 +6,8 @@ import {
   PROTOCOL_VERSION,
   type ErrorCode,
   type InstanceEvent,
+  type PushRequest,
+  type PushSubscribeRequest,
   type ReadyMessage,
   type RelayedMessage,
   type RemovedEvent,
@@ -72,8 +74,18 @@ type Events = {
   stopped: [reason: StopReason]
 }
 
-/** Requests that get an answer; `send` gets none, only an error if it fails. */
-type Request = { t: 'invite' } | { t: 'instances' } | { t: 'remove'; instance: string } | { t: 'rename'; instance?: string; name: string }
+/**
+ * Requests that get an answer; `send` gets none, only an error if it fails. A push brings its own id: it
+ * is the sealed message's, which the receiver checks.
+ */
+type Request =
+  | { t: 'invite' }
+  | { t: 'instances' }
+  | { t: 'remove'; instance: string }
+  | { t: 'rename'; instance?: string; name: string }
+  | Omit<PushSubscribeRequest, 'id'>
+  | { t: 'push-unsubscribe' }
+  | PushRequest
 
 export interface ConnectionOptions {
   /** `wss://…/v1/ws`. */
@@ -143,7 +155,7 @@ export class ServerConnection extends TypedEmitter<Events> {
   /** Sends a request and waits for its answer; an `error` of the server rejects with `ServerError`. */
   request(request: Request): Promise<ServerMessage> {
     if (this.current !== 'online' || !this.socket) return Promise.reject(new ServerError('offline', 'not connected'))
-    const id = `r${++this.counter}`
+    const id = 'id' in request ? request.id : `r${++this.counter}`
     const socket = this.socket
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

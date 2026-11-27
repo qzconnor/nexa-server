@@ -21,5 +21,7 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.vue"],
+  // The service worker has its own lib (tsconfig.sw.json); DOM and WebWorker don't go together.
+  "exclude": ["src/sw.ts", "src/sw.test.ts"]
 }

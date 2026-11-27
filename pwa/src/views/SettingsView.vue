@@ -2,6 +2,7 @@
 import { Check, ExternalLink } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import PairingSettings from '../components/PairingSettings.vue'
+import PushSettings from '../components/PushSettings.vue'
 import type { ServerInfo } from '../shared/nexa-server/protocol'
 import { themeId, themes } from '../theme'
 
@@ -28,6 +29,8 @@ onMounted(async () => {
 <template>
   <div class="mx-auto max-w-xl space-y-8 p-4">
     <PairingSettings />
+
+    <PushSettings />
 
     <section aria-labelledby="settings-theme" class="space-y-4">
       <div class="px-1">

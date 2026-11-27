@@ -24,6 +24,8 @@ const SHARED_ENTRIES = [
   'nexa-server/envelope.ts',
   'nexa-server/members.ts',
   'nexa-server/pairing-code.ts',
+  // What a computer pushes to the phone; the service worker reads it.
+  'push.ts',
   'themes/builtin.ts',
   'themes/checks.ts',
   'themes/colors.ts',

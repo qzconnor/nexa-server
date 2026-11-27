@@ -61,6 +61,15 @@ export function hasChats(device: Pick<LinkedDevice, 'role'>): boolean {
   return device.role === 'host'
 }
 
+/**
+ * The phones the notifications of chats go to (setting `notifications.push`): controllers that may at
+ * least read along here. A push tells what happened in a chat; a device that may not see it gets none.
+ */
+export function pushPhones(state: Pick<ServerLinkState, 'remoteEnabled' | 'devices'>): LinkedDevice[] {
+  if (!state.remoteEnabled) return []
+  return state.devices.filter((d) => d.role === 'controller' && !d.self && d.trusted && d.level !== 'off')
+}
+
 export interface ServerLinkState {
   status: ServerLinkStatus
   url: string | null

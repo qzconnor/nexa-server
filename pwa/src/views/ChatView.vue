@@ -354,16 +354,32 @@ async function stop(): Promise<void> {
         <!--
           Agents and shells at work rest on the composer, as in the app. The „+“ menu opens over them and
           they step aside meanwhile, glass over glass would blur into one; their room stays, the chat
-          doesn't jump.
+          doesn't jump. Each pane fades itself: faded on a wrapper, they would lose their blur until
+          the end and their text would float without its glass.
         -->
         <div
           v-if="dockAgents.length || dockShellList.length"
-          class="space-y-2 transition-opacity duration-200"
-          :class="menuOpen && 'pointer-events-none opacity-0'"
+          class="space-y-2"
+          :class="menuOpen && 'pointer-events-none'"
           :inert="menuOpen"
         >
-          <AgentDock v-if="dockAgents.length" v-model:shown="agentId" :agents="dockAgents" :now="now" />
-          <ShellDock v-if="dockShellList.length" :shells="dockShellList" :session-id="props.chat" :now="now" :full="canFull" />
+          <AgentDock
+            v-if="dockAgents.length"
+            v-model:shown="agentId"
+            :agents="dockAgents"
+            :now="now"
+            class="transition-opacity duration-200"
+            :class="menuOpen && 'opacity-0'"
+          />
+          <ShellDock
+            v-if="dockShellList.length"
+            :shells="dockShellList"
+            :session-id="props.chat"
+            :now="now"
+            :full="canFull"
+            class="transition-opacity duration-200"
+            :class="menuOpen && 'opacity-0'"
+          />
         </div>
         <Composer
           v-if="canPrompt && chat?.loaded && meta"

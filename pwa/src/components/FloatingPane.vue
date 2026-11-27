@@ -52,23 +52,19 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="open" class="fixed inset-0 z-40" aria-hidden="true" @click="close" />
-  <Transition
-    enter-active-class="transition duration-200 ease-out"
-    :enter-from-class="side === 'above' ? 'translate-y-2 opacity-0' : '-translate-y-2 opacity-0'"
-    leave-active-class="transition duration-150 ease-in"
-    :leave-to-class="side === 'above' ? 'translate-y-2 opacity-0' : '-translate-y-2 opacity-0'"
-  >
-    <div v-if="open" class="absolute inset-x-0 z-50" :class="side === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'">
-      <!-- The shadow on a wrapper: the pane's clip (bar-round) would cut it off. -->
-      <div class="floating">
-        <div
-          ref="pane"
-          role="dialog"
-          aria-modal="true"
-          :aria-label="label"
-          tabindex="-1"
-          class="floating-pane glass bar-round pane-edge flex max-h-[60dvh] flex-col border border-foreground/10 p-1.5 outline-none"
-        >
+  <Transition name="pane">
+    <div v-if="open" class="absolute inset-x-0 z-50" :class="side === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'" :data-side="side">
+      <!-- The shadow beside the pane, not around it: the pane's clip (bar-round) would cut it off, and a fading wrapper would take its blur. -->
+      <div class="pane-fade floating absolute inset-0" aria-hidden="true" />
+      <div
+        ref="pane"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="label"
+        tabindex="-1"
+        class="pane-fade floating-pane glass bar-round pane-edge relative flex max-h-[60dvh] flex-col border border-foreground/10 p-1.5 outline-none"
+      >
+        <div class="pane-content flex min-h-0 flex-col">
           <slot />
         </div>
       </div>
@@ -81,5 +77,58 @@ onBeforeUnmount(() => {
 .floating-pane {
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   backdrop-filter: blur(20px) saturate(160%);
+}
+
+/*
+ * The wrapper only moves; the pane and its shadow fade themselves. Faded on the wrapper, the pane would
+ * lose its blur until the end (an ancestor with opacity below 1 leaves backdrop-filter nothing to blur)
+ * and its text would float over the sharp chat for a moment.
+ */
+.pane-enter-active,
+.pane-enter-active .pane-fade {
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+.pane-leave-active,
+.pane-leave-active .pane-fade {
+  transition-duration: 150ms;
+  transition-timing-function: ease-in;
+}
+.pane-enter-active,
+.pane-leave-active {
+  transition-property: translate;
+}
+.pane-enter-active .pane-fade,
+.pane-leave-active .pane-fade {
+  transition-property: opacity;
+}
+.pane-enter-from[data-side='above'],
+.pane-leave-to[data-side='above'] {
+  translate: 0 0.5rem;
+}
+.pane-enter-from[data-side='below'],
+.pane-leave-to[data-side='below'] {
+  translate: 0 -0.5rem;
+}
+.pane-enter-from .pane-fade,
+.pane-leave-to .pane-fade {
+  opacity: 0;
+}
+/* What it holds comes a moment after the glass and goes a moment before it: no text without its pane. */
+.pane-enter-active .pane-content {
+  transition: opacity 150ms ease-out 50ms;
+}
+.pane-leave-active .pane-content {
+  transition: opacity 100ms ease-in;
+}
+.pane-enter-from .pane-content,
+.pane-leave-to .pane-content {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pane-enter-from,
+  .pane-leave-to {
+    translate: none !important;
+  }
 }
 </style>

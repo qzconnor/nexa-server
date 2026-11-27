@@ -58,12 +58,11 @@ function back(): void {
       <RouterView />
     </main>
 
-    <nav
-      v-if="!route.meta.fullscreen"
-      class="glass pb-safe px-safe absolute inset-x-0 bottom-0 z-10 border-t border-border"
-      aria-label="Bereiche"
-    >
-      <div class="mx-auto grid h-(--tabbar-height) max-w-xl grid-cols-2">
+    <!-- A dock like the app's composer, as wide as the pages' cards (p-4 in max-w-xl); the page shows around it. -->
+    <nav v-if="!route.meta.fullscreen" class="bottom-dock px-safe pointer-events-none absolute inset-x-0 z-10" aria-label="Bereiche">
+      <div
+        class="glass pointer-events-auto mx-4 grid h-(--tabbar-height) grid-cols-2 rounded-2xl border border-border shadow-lg shadow-black/25 sm:mx-auto sm:max-w-[34rem]"
+      >
         <RouterLink
           v-for="tab in tabs"
           :key="tab.id"

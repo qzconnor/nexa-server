@@ -152,8 +152,13 @@
   .pt-header {
     padding-top: calc(var(--header-height) + env(safe-area-inset-top));
   }
+  /* The tab bar floats as a dock: its gap to the bottom, or the home indicator if that is higher. */
+  .bottom-dock {
+    bottom: max(env(safe-area-inset-bottom), 1rem);
+  }
+  /* The dock, its gap below and a little air above, so the last of a page scrolls clear of it. */
   .pb-tabbar {
-    padding-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--tabbar-height) + max(env(safe-area-inset-bottom), 1rem) + 0.75rem);
   }
   /* The notch, the home indicator and the rounded corners of a phone in standalone mode. */
   .pt-safe {

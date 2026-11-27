@@ -3,16 +3,15 @@ import { LoaderCircle, Monitor, MonitorOff } from '@lucide/vue'
 import { computed } from 'vue'
 import ConnectionBanner from '../components/ConnectionBanner.vue'
 import HostChats from '../components/HostChats.vue'
-import NotPaired from '../components/NotPaired.vue'
 import { computerDot, computers, computerStatus, computerTitle, shownComputer } from '../computers'
-import { linkState } from '../link'
+import { isPaired, linkState } from '../link'
 import { usePageTitle } from '../page-title'
 
 /**
  * The chats of one computer: the only one, or the one picked in the header's menu. Its name sits in the
  * header, not in a card above them.
  */
-const paired = computed(() => linkState.value.status !== 'unpaired' && linkState.value.status !== 'loading')
+const paired = computed(() => isPaired(linkState.value))
 const shown = shownComputer
 const status = computed(() => (shown.value ? computerStatus(shown.value) : null))
 usePageTitle(() => (shown.value ? computerTitle(shown.value) : null))
@@ -24,8 +23,7 @@ const rows = computed(() => computers.value.map((device) => ({ device, status: c
 <template>
   <div class="mx-auto max-w-xl space-y-4 p-4">
     <ConnectionBanner />
-    <NotPaired v-if="linkState.status === 'unpaired'" />
-    <template v-else-if="paired">
+    <template v-if="paired">
       <template v-if="shown && status">
         <HostChats v-if="status.level" :instance="shown.id" />
         <div v-else class="flex flex-col items-center gap-2 px-4 py-16 text-center">

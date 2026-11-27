@@ -3,10 +3,9 @@ import { CircleAlert, CircleCheck, Hand, LoaderCircle, MonitorOff } from '@lucid
 import { computed, type Component } from 'vue'
 import ConnectionBanner from '../components/ConnectionBanner.vue'
 import InboxEntry from '../components/InboxEntry.vue'
-import NotPaired from '../components/NotPaired.vue'
 import { computerById, computers } from '../computers'
 import { inbox } from '../inbox'
-import { linkState } from '../link'
+import { isPaired, linkState } from '../link'
 import { INBOX_SECTIONS, type InboxSection } from '../shared/inbox'
 
 /** What waits on the computers, all of them in one list: questions to answer, what broke, what is done. */
@@ -17,7 +16,7 @@ const SECTIONS: Record<InboxSection, { title: string; icon: Component; tone: str
   running: { title: 'Läuft gerade', icon: LoaderCircle, tone: 'text-muted-foreground' },
 }
 
-const paired = computed(() => linkState.value.status !== 'unpaired' && linkState.value.status !== 'loading')
+const paired = computed(() => isPaired(linkState.value))
 const listed = computed(() => [...inbox.computers].map(([id, state]) => ({ id, state, name: computerById(id)?.name ?? 'Computer' })))
 /** With several computers each entry says which one it is on. */
 const many = computed(() => listed.value.length > 1)
@@ -41,8 +40,7 @@ const unreachable = computed(() => linkState.value.status === 'online' && comput
   <!-- A column as high as the page, so what stands alone (nothing waits, nobody there) sits in its middle. -->
   <div class="mx-auto flex min-h-full max-w-xl flex-col gap-6 p-4">
     <ConnectionBanner />
-    <NotPaired v-if="linkState.status === 'unpaired'" />
-    <template v-else-if="paired">
+    <template v-if="paired">
       <p v-if="!computers.length" class="glass card-round pane-edge border border-foreground/10 px-4 py-3 text-sm text-muted-foreground">
         Im Namespace ist noch kein Computer. Koppel Nexa auf dem Computer mit demselben Server.
       </p>

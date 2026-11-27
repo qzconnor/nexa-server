@@ -12,5 +12,7 @@ const code = takePairingCodeFromUrl()
 startPush(router)
 startLink()
 const app = createApp(App).use(router)
-if (code) void router.replace('/pair')
-app.mount('#app')
+if (code) void router.replace('/setup')
+// After the first navigation: until then it waits for the pairing (router.ts), and a page shown before
+// would flash the tabs at a device that has none.
+void router.isReady().then(() => app.mount('#app'))
